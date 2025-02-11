@@ -1,9 +1,9 @@
 
-#include "Engine/Application/Application.h"
+#include "App.h"
 
 int main()
 {
-	Okay::Application app("D3D12 Renderer", 1600, 900);
+	App app("D3D12 Renderer", 1600, 900);
 	app.run();
 
 	return 0;

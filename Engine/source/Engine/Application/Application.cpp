@@ -22,6 +22,10 @@ namespace Okay
 		while (m_window.isOpen())
 		{
 			m_window.processMessages();
+
+			onUpdate(0.f); // 0.f dt temporary
+
 		}
 	}
+
 }

@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="source\Engine\Scene\Entity.h" />
+    <ClInclude Include="source\Engine\Scene\Scene.h" />
     <ClInclude Include="source\Engine\Application\Application.h" />
     <ClInclude Include="source\Engine\Application\Window.h" />
     <ClInclude Include="source\Engine\Okay.h" />

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Window.h"
+#include "Engine/Scene/Scene.h"
 
 namespace Okay
 {
@@ -11,6 +12,11 @@ namespace Okay
 		virtual ~Application();
 
 		void run();
+
+		virtual void onUpdate(float dt) = 0;
+
+	protected:
+		Okay::Scene m_scene;
 
 	private:
 
