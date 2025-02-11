@@ -18,6 +18,16 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="source\Engine\Application\Application.h" />
+    <ClInclude Include="source\Engine\Application\Window.h" />
+    <ClInclude Include="source\Engine\Okay.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="source\Engine\Application\Application.cpp" />
+    <ClCompile Include="source\Engine\Application\Window.cpp" />
+    <ClCompile Include="source\Engine\Okay.cpp" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -93,14 +103,15 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)source\Engine;$(ProjectDir)deps\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)source;$(ProjectDir)deps\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>d3d12.lib;</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;glfw3.lib;assimp-vc143-mtd.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)deps\lib\$(Configuration)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -112,7 +123,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)source\Engine;$(ProjectDir)deps\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)source;$(ProjectDir)deps\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -121,7 +132,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>d3d12.lib;</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;glfw3.lib;assimp-vc143-mt.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)deps\lib\$(Configuration)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -131,14 +143,15 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)source\Engine;$(ProjectDir)deps\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)source;$(ProjectDir)deps\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>d3d12.lib;</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;glfw3.lib;assimp-vc143-mtd.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)deps\lib\$(Configuration)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -150,7 +163,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)source\Engine;$(ProjectDir)deps\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)source;$(ProjectDir)deps\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -159,15 +172,10 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <Lib>
-      <AdditionalDependencies>d3d12.lib;</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;glfw3.lib;assimp-vc143-mt.lib;</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)deps\lib\$(Configuration)</AdditionalLibraryDirectories>
     </Lib>
   </ItemDefinitionGroup>
-  <ItemGroup>
-    <ClInclude Include="Source\Engine\Engine.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="Source\Engine\Engine.cpp" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
