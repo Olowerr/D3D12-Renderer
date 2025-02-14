@@ -4,8 +4,8 @@
 
 #include "GLFW/glfw3.h"
 
+#include <Windows.h>
 #include <string_view>
-#include <inttypes.h>
 
 namespace Okay
 {
@@ -20,6 +20,8 @@ namespace Okay
 
 		bool isOpen() const;
 		void processMessages();
+
+		HWND getHWND() const;
 
 	private:
 

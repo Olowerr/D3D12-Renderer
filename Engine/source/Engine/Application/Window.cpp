@@ -1,5 +1,8 @@
 #include "Window.h"
 
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include "GLFW/glfw3native.h"
+
 namespace Okay
 {
 	Window::~Window()
@@ -40,6 +43,11 @@ namespace Okay
 	void Window::processMessages()
 	{
 		glfwPollEvents();
+	}
+
+	HWND Window::getHWND() const
+	{
+		return glfwGetWin32Window(m_pGlfwWindow);
 	}
 
 }

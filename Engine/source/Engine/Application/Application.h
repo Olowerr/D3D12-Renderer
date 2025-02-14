@@ -2,6 +2,7 @@
 
 #include "Window.h"
 #include "Engine/Scene/Scene.h"
+#include "Engine/Graphics/Renderer.h"
 
 namespace Okay
 {
@@ -13,14 +14,15 @@ namespace Okay
 
 		void run();
 
+		// onStart, onEnd
 		virtual void onUpdate(float dt) = 0;
 
 	protected:
-		Okay::Scene m_scene;
+		Scene m_scene;
 
 	private:
-
-		Okay::Window m_window;
+		Window m_window;
+		Renderer m_renderer;
 
 	};
 }

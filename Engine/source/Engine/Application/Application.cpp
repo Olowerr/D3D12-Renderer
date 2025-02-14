@@ -10,6 +10,7 @@ namespace Okay
 		OKAY_ASSERT(glInit);
 
 		m_window.initiate(windowName, windowWidth, windowHeight);
+		m_renderer.initialize(m_window);
 	}
 
 	Application::~Application()
