@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="source\Engine\Graphics\CommandContext.h" />
     <ClInclude Include="source\Engine\Graphics\GPUResourceManager.h" />
     <ClInclude Include="source\Engine\Graphics\Renderer.h" />
     <ClInclude Include="source\Engine\Resources\Mesh.h" />
@@ -29,6 +30,7 @@
     <ClInclude Include="source\Engine\Okay.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="source\Engine\Graphics\CommandContext.cpp" />
     <ClCompile Include="source\Engine\Graphics\GPUResourceManager.cpp" />
     <ClCompile Include="source\Engine\Graphics\Renderer.cpp" />
     <ClCompile Include="source\Engine\Application\Application.cpp" />
