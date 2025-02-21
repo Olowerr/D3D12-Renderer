@@ -3,6 +3,7 @@
 #include "Engine/Application/Window.h"
 #include "Engine/Scene/Scene.h"
 #include "GPUResourceManager.h"
+#include "CommandContext.h"
 
 #include <d3d12.h>
 #include <dxgi.h>
@@ -25,22 +26,18 @@ namespace Okay
 		void render(const Scene& scene);
 
 	private:
-		void createDevice(IDXGIFactory* pFactory);
-		void createCommandList();
+		void enableDebugLayer();
+		void enableGPUBasedValidation();
 
+		void createDevice(IDXGIFactory* pFactory);
 		void createSwapChain(IDXGIFactory* pFactory, const Window& window);
 
 	private:
-
 		ID3D12Device* m_pDevice = nullptr;
-
-		ID3D12CommandQueue* m_pCommandQueue = nullptr;
-		ID3D12CommandAllocator* m_pCommandAllocator = nullptr;
-		ID3D12GraphicsCommandList* m_pCommandList = nullptr;
-
 		IDXGISwapChain1* m_pSwapChain = nullptr;
 
 	private:
+		CommandContext m_commandContext;
 		GPUResourceManager m_gpuResourceManager;
 
 	};

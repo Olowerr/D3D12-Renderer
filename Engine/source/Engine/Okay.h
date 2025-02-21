@@ -29,6 +29,8 @@
 #define DX_CHECK(x) OKAY_ASSERT2(SUCCEEDED(x))
 #define D3D12_RELEASE(x) if (x) { x->Release(); x = nullptr; }0
 
+#define CHECK_BIT(num, pos)	((num) & 1<<(pos))
+
 namespace Okay
 {
 	struct Vertex
@@ -36,5 +38,16 @@ namespace Okay
 		glm::vec3 position;
 	};
 
-	constexpr uint32_t INVALID_UINT = UINT32_MAX;
+	constexpr uint32_t INVALID_UINT32 = UINT32_MAX;
+	constexpr uint64_t INVALID_UINT64 = UINT64_MAX;
+
+	constexpr uint64_t alignAddress64(uint64_t adress, uint64_t alignment)
+	{
+		return ((adress - 1) - ((adress - 1) % alignment)) + alignment;
+	}
+
+	constexpr uint32_t alignAddress32(uint32_t address, uint32_t alignment)
+	{
+		return (uint32_t)alignAddress64((uint64_t)address, (uint64_t)alignment);
+	}
 }

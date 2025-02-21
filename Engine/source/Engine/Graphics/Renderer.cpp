@@ -11,23 +11,51 @@ namespace Okay
 	
 	void Renderer::initialize(const Window& window)
 	{
+#ifndef NDEBUG
+		enableDebugLayer();
+		enableGPUBasedValidation();
+#endif
+
 		IDXGIFactory* pFactory = nullptr;
 		DX_CHECK(CreateDXGIFactory(IID_PPV_ARGS(&pFactory)));
 
 		createDevice(pFactory);
-		createCommandList();
 
-		m_gpuResourceManager.initialize(m_pDevice);
+		m_commandContext.initialize(m_pDevice);
+		m_gpuResourceManager.initialize(m_pDevice, m_commandContext);
+
+		ResourceHandle handle = m_gpuResourceManager.addConstantBuffer(BufferUsage::STATIC, 30000, nullptr);
+		ResourceHandle handle1 = m_gpuResourceManager.addConstantBuffer(BufferUsage::STATIC, 60000, nullptr);
+
+		uint32_t width = 4096;
+		uint32_t height = 4096;
+		unsigned char* pTestTextureData = new unsigned char[width * height * 4] {};
+		for (uint32_t y = 0; y < height; y++)
+		{
+			for (uint32_t x = 0; x < width; x++)
+			{
+				unsigned char r = (x / width) * 255;
+				unsigned char g = (y / height) * 255;
+				unsigned char b = 0; // (x / height) * 255;
+				unsigned char a = 0;
+
+				pTestTextureData[(y * width + x) * 4 + 0] = r;
+				pTestTextureData[(y * width + x) * 4 + 1] = g;
+				pTestTextureData[(y * width + x) * 4 + 2] = b;
+				pTestTextureData[(y * width + x) * 4 + 3] = a;
+			}
+		}
+
+		ResourceHandle textureHandle1 = m_gpuResourceManager.addTexture(width / 2, height / 2, TextureFormat::U_8X4, (uint32_t)TextureFlags::SHADER_READ, pTestTextureData);
+		ResourceHandle textureHandle2 = m_gpuResourceManager.addTexture(width, height, TextureFormat::U_8X4, (uint32_t)TextureFlags::SHADER_READ, pTestTextureData);
 	}
 	
 	void Renderer::shutdown()
 	{
-		D3D12_RELEASE(m_pDevice);
-		D3D12_RELEASE(m_pCommandQueue);
-		D3D12_RELEASE(m_pCommandAllocator);
-		D3D12_RELEASE(m_pCommandList);
-
+		m_commandContext.shutdown();
 		m_gpuResourceManager.shutdown();
+
+		D3D12_RELEASE(m_pDevice);
 	}
 	
 	void Renderer::render(const Scene& scene)
@@ -56,21 +84,6 @@ namespace Okay
 		D3D12_RELEASE(pAdapter);
 	}
 
-	void Renderer::createCommandList()
-	{
-		D3D12_COMMAND_QUEUE_DESC desc{};
-		desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-		desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-		desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-		desc.NodeMask = 0;
-
-		DX_CHECK(m_pDevice->CreateCommandQueue(&desc, IID_PPV_ARGS(&m_pCommandQueue)));
-		
-		DX_CHECK(m_pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_pCommandAllocator)));
-
-		DX_CHECK(m_pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_pCommandAllocator, nullptr, IID_PPV_ARGS(&m_pCommandList)));
-	}
-
 	void Renderer::createSwapChain(IDXGIFactory* pFactory, const Window& window)
 	{
 		IDXGIFactory2* pFactory2 = nullptr;
@@ -93,4 +106,21 @@ namespace Okay
 		DX_CHECK(pFactory2->CreateSwapChainForHwnd(m_pDevice, window.getHWND(), &swapChainDesc, nullptr, nullptr, &m_pSwapChain));
 	}
 
+	void Renderer::enableDebugLayer()
+	{
+		ID3D12Debug* pDebugController = nullptr;
+		DX_CHECK(D3D12GetDebugInterface(IID_PPV_ARGS(&pDebugController)));
+
+		pDebugController->EnableDebugLayer();
+		D3D12_RELEASE(pDebugController);
+	}
+
+	void Renderer::enableGPUBasedValidation()
+	{
+		ID3D12Debug1* pDebugController = nullptr;
+		DX_CHECK(D3D12GetDebugInterface(IID_PPV_ARGS(&pDebugController)));
+
+		pDebugController->SetEnableGPUBasedValidation(true);
+		D3D12_RELEASE(pDebugController);
+	}
 }
