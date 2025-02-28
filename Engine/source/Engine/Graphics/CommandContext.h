@@ -10,7 +10,7 @@ namespace Okay
 	{
 	public:
 		CommandContext() = default;
-		virtual ~CommandContext();
+		virtual ~CommandContext() = default;
 	
 		void initialize(ID3D12Device* pDevice);
 		void shutdown();

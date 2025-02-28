@@ -18,7 +18,7 @@ namespace Okay
 
 	public:
 		Renderer() = default;
-		virtual ~Renderer();
+		virtual ~Renderer() = default;
 
 		void initialize(const Window& window);
 		void shutdown();

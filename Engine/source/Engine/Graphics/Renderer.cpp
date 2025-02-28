@@ -4,11 +4,6 @@
 
 namespace Okay
 {
-	Renderer::~Renderer()
-	{
-		shutdown();
-	}
-	
 	void Renderer::initialize(const Window& window)
 	{
 #ifndef NDEBUG
@@ -24,8 +19,9 @@ namespace Okay
 		m_commandContext.initialize(m_pDevice);
 		m_gpuResourceManager.initialize(m_pDevice, m_commandContext);
 
-		ResourceHandle handle = m_gpuResourceManager.addConstantBuffer(BufferUsage::STATIC, 30000, nullptr);
-		ResourceHandle handle1 = m_gpuResourceManager.addConstantBuffer(BufferUsage::STATIC, 60000, nullptr);
+		ResourceHandle handle = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 30000, nullptr);
+		ResourceHandle handle1 = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 30000, nullptr);
+		ResourceHandle handle2 = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 30000, nullptr);
 
 		uint32_t width = 4096;
 		uint32_t height = 4096;
@@ -46,8 +42,10 @@ namespace Okay
 			}
 		}
 
-		ResourceHandle textureHandle1 = m_gpuResourceManager.addTexture(width / 2, height / 2, TextureFormat::U_8X4, (uint32_t)TextureFlags::SHADER_READ, pTestTextureData);
-		ResourceHandle textureHandle2 = m_gpuResourceManager.addTexture(width, height, TextureFormat::U_8X4, (uint32_t)TextureFlags::SHADER_READ, pTestTextureData);
+		ResourceHandle textureHandle1 = m_gpuResourceManager.addTexture(width / 2, height / 2, DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, pTestTextureData);
+		ResourceHandle textureHandle2 = m_gpuResourceManager.addTexture(width, height, DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, pTestTextureData);
+
+		m_gpuResourceManager.updateBuffer(handle1, pTestTextureData);
 	}
 	
 	void Renderer::shutdown()

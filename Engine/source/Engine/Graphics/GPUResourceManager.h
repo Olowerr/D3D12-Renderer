@@ -2,141 +2,86 @@
 
 #include "Engine/Okay.h"
 #include "CommandContext.h"
+#include "HeapStore.h"
 
 #include <d3d12.h>
 
-#define RESOURCE_PLACEMENT_ALIGNMENT	D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT
-#define BUFFER_DATA_ALIGNMENT			D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT
-#define TEXTURE_DATA_ALIGNMENT			D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
-
 namespace Okay
 {
-	typedef uint32_t ResourceHandle;
+	typedef uint64_t ResourceHandle;
 
-	enum class DescriptorType : uint32_t
-	{
-		NONE = INVALID_UINT32,
-		RTV = D3D12_DESCRIPTOR_HEAP_TYPE_RTV,
-		CBV_SRV_UAV = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-		DSV = D3D12_DESCRIPTOR_HEAP_TYPE_DSV,
-	};
+	// Describes the byte offsets used for the different parts of a ResourceHandle
+	// Currently assuming each part 'only' needs 16 bits
+	constexpr uint8_t HANDLE_RESOURCE_IDX_OFFSET = 0;
+	constexpr uint8_t HANDLE_ALLOCATION_IDX_OFFSET = 2;
+	constexpr uint8_t HANDLE_USAGE_OFFSET = 4;
 
-	struct DescriptorStorage
-	{
-		ID3D12DescriptorHeap* pDescriptorHeap = nullptr;
-
-		uint32_t maxDescriptors = INVALID_UINT32;
-		uint32_t numDescriptors = INVALID_UINT32;
-
-		uint32_t descriptorSize = INVALID_UINT32;
-	};
-
-	struct GPUTexture
-	{
-		ID3D12Resource* pResource = nullptr;
-		uint32_t descriptorOffset = INVALID_UINT32;
-	};
-
-	struct TextureStorage
-	{
-		std::vector<GPUTexture> gpuTextures;
-		ID3D12Heap* pHeap = nullptr;
-
-		uint64_t maxHeapSize = INVALID_UINT32;
-		uint64_t currentHeapSize = INVALID_UINT32;
-	};
-
-	struct GPUBuffer
+	struct ResourceAllocation
 	{
 		uint32_t elementSize = INVALID_UINT32;
 		uint32_t numElements = INVALID_UINT32;
-
-		uint32_t resourceOffset = INVALID_UINT32;
-		uint32_t descriptorOffset = INVALID_UINT32;
+		
+		uint64_t resourceOffset = INVALID_UINT64;
 	};
 
-	struct BufferStorage
+	struct Resource
 	{
-		std::vector<GPUBuffer> gpuBuffers;
-		ID3D12Resource* pResource = nullptr;
-
-		uint32_t maxResourceSize = INVALID_UINT32;
-		uint32_t currentResourceSize = INVALID_UINT32;
+		ID3D12Resource* pDXResource = nullptr;
+		uint64_t usedSize = INVALID_UINT64;
 	};
 
-	enum class TextureFormat : uint32_t
+	enum TextureFlags : uint32_t
 	{
-		NONE = INVALID_UINT32,
-		U_8X1 = DXGI_FORMAT_R8_UNORM,
-		U_8X4 = DXGI_FORMAT_R8G8B8A8_UNORM,
-		DEPTH = DXGI_FORMAT_D32_FLOAT,
+		OKAY_TEXTURE_FLAG_NONE = 0,
+		OKAY_TEXTURE_FLAG_RENDER = 1,
+		OKAY_TEXTURE_FLAG_SHADER_READ = 2,
+		OKAY_TEXTURE_FLAG_DEPTH = 4,
 	};
 
-	enum class TextureFlags : uint32_t
+	enum BufferUsage : uint8_t
 	{
-		NONE = 0,
-		RENDER = 1,
-		SHADER_READ = 2,
-		DEPTH = 4,
-	};
-
-	enum class BufferUsage : uint32_t
-	{
-		NONE = 0,
-		STATIC = 1,
-		DYNAMIC = 2,
-	};
-
-	enum class ResourceType : uint32_t
-	{
-		NONE = 0,
-		BUFFER = 1,
-		TEXTURE = 2,
+		OKAY_BUFFER_USAGE_NONE = 0,
+		OKAY_BUFFER_USAGE_STATIC = 1,
+		OKAY_BUFFER_USAGE_DYNAMIC = 2,
 	};
 
 	class GPUResourceManager
 	{
 	public:
 		GPUResourceManager() = default;
-		virtual ~GPUResourceManager();
+		virtual ~GPUResourceManager() = default;
 
 		void initialize(ID3D12Device* pDevice, CommandContext& commandContext);
 		void shutdown();
 
-		ResourceHandle addTexture(uint32_t width, uint32_t height, TextureFormat format, uint32_t flags, void* pData);
+		ResourceHandle addTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, void* pData);
 
 		ResourceHandle addConstantBuffer(BufferUsage usage, uint32_t byteSize, void* pData);
 		ResourceHandle addStructuredBuffer(BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData);
 		ResourceHandle addVertexBuffer(uint32_t vertexSize, uint32_t numVerticies, void* pData);
 		ResourceHandle addIndexBuffer(uint32_t numIndicies, void* pData);
 
-		// Only for constant & structured buffers
 		void updateBuffer(ResourceHandle handle, void* pData);
 
 	private:
-		void initBufferStorage(BufferStorage& storage, BufferUsage usage, uint32_t bufferSize);
-		void initTextureStorage(TextureStorage& storage, uint64_t size);
-		void initDescriptorStorage(DescriptorStorage& storage, DescriptorType type);
-
-		void shutdownBufferStorage(BufferStorage& storage);
-		void shutdownTextureStorage(TextureStorage& storage);
-		void shutdownDescriptorStorage(DescriptorStorage& storage);
-
-		void createHeap(ID3D12Heap** ppHeap, BufferUsage usage, uint64_t byteSize);
 		void createUploadResource(ID3D12Resource** ppResource, uint64_t byteSize);
-
-		void resizeBufferStorage(BufferStorage& storage, BufferUsage usage, uint32_t newSize);
 		void resizeUploadBuffer(uint64_t newSize);
-		void resizeTextureStorage(TextureStorage& storage, uint64_t newSize);
 
-	private:
-		ResourceHandle addBufferInternal(BufferStorage& storage, BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData);
+		ResourceHandle addBufferInternal(std::vector<Resource>& resourceList, BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData);
 		
-		BufferStorage& getBufferStorage(BufferUsage usage);
+		D3D12_HEAP_TYPE getHeapType(BufferUsage usage);
+		HeapStore& getHeapStore(BufferUsage usage);
+		std::vector<Resource>& getResourceList(BufferUsage usage);
 
-		void updateBufferUpload(ID3D12Resource* pResource, uint32_t resourceOffset, uint32_t byteSize, void* pData);
-		void updateBufferDirect(ID3D12Resource* pResource, uint32_t resourceOffset, uint32_t byteSize, void* pData);
+		void updateBufferInternal(const Resource& pResource, const ResourceAllocation& allocation, BufferUsage usage, void* pData);
+		void updateBufferUpload(ID3D12Resource* pResource, uint64_t resourceOffset, uint32_t byteSize, void* pData);
+		void updateBufferDirect(ID3D12Resource* pResource, uint64_t resourceOffset, uint32_t byteSize, void* pData);
 		void updateTexture(ID3D12Resource* pResource, unsigned char* pData);
+
+		ResourceHandle generateHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage);
+		void decodeHandle(ResourceHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation, BufferUsage** ppUsage);
+
+		void validateDecodedHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage);
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
@@ -146,14 +91,12 @@ namespace Okay
 		uint64_t m_uploadHeapCurrentSize = INVALID_UINT64;
 		uint64_t m_uploadHeapMaxSize = INVALID_UINT64;
 
-		BufferStorage m_staticBuffers;
-		BufferStorage m_dynamicBuffers;
-		BufferStorage m_meshStorage; // Vertex & Index buffer storage, always static (atleast for now)
+		HeapStore m_staticHeapStore;
+		HeapStore m_dynamicHeapStore;
 
-		TextureStorage m_textureStorage;
+		std::vector<Resource> m_staticResources;
+		std::vector<Resource> m_dynamicResources;
 
-		DescriptorStorage m_rtvStorage;
-		DescriptorStorage m_cbvSrvUavStorage;
-		DescriptorStorage m_dsvStorage;
+		std::vector<ResourceAllocation> m_allocations;
 	};
 }

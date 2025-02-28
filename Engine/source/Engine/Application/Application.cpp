@@ -15,6 +15,7 @@ namespace Okay
 
 	Application::~Application()
 	{
+		m_renderer.shutdown();
 		m_window.shutdown();
 	}
 

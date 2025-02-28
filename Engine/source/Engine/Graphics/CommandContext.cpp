@@ -3,11 +3,6 @@
 
 namespace Okay
 {
-	CommandContext::~CommandContext()
-	{
-		shutdown();
-	}
-
 	void CommandContext::initialize(ID3D12Device* pDevice)
 	{
 		D3D12_COMMAND_QUEUE_DESC queueDesc{};
