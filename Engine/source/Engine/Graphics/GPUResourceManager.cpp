@@ -226,7 +226,7 @@ namespace Okay
 		return handle;
 	}
 
-	void GPUResourceManager::decodeHandle(ResourceHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation, BufferUsage** ppUsage)
+	void GPUResourceManager::decodeHandle(ResourceHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation, BufferUsage** ppOutUsage)
 	{
 		uint8_t* pHandle = (uint8_t*)&handle;
 
@@ -240,7 +240,7 @@ namespace Okay
 
 		*ppOutResource = &resourceList[resourceIndex];
 		*ppOutAllocation = &m_allocations[allocationIndex];
-		*ppUsage = &usage;
+		*ppOutUsage = &usage;
 	}
 
 	void GPUResourceManager::validateDecodedHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage)

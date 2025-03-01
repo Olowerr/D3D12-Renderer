@@ -79,8 +79,7 @@ namespace Okay
 		void updateTexture(ID3D12Resource* pResource, unsigned char* pData);
 
 		ResourceHandle generateHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage);
-		void decodeHandle(ResourceHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation, BufferUsage** ppUsage);
-
+		void decodeHandle(ResourceHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation, BufferUsage** ppOutUsage);
 		void validateDecodedHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage);
 
 	private:
