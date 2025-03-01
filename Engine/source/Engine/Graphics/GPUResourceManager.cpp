@@ -66,8 +66,7 @@ namespace Okay
 		OKAY_ASSERT(usage != OKAY_BUFFER_USAGE_NONE);
 		OKAY_ASSERT(byteSize);
 
-		std::vector<Resource>& resourceList = getResourceList(usage);
-		return addBufferInternal(resourceList, usage, byteSize, 1, pData);
+		return addBufferInternal(usage, byteSize, 1, pData);
 	}
 
 	ResourceHandle GPUResourceManager::addStructuredBuffer(BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData)
@@ -76,8 +75,7 @@ namespace Okay
 		OKAY_ASSERT(elementSize);
 		OKAY_ASSERT(elementCount);
 
-		std::vector<Resource>& resourceList = getResourceList(usage);
-		return addBufferInternal(resourceList, usage, elementSize, elementCount, pData);
+		return addBufferInternal(usage, elementSize, elementCount, pData);
 	}
 
 	ResourceHandle GPUResourceManager::addVertexBuffer(uint32_t vertexSize, uint32_t numVerticies, void* pData)
@@ -86,7 +84,7 @@ namespace Okay
 		OKAY_ASSERT(numVerticies);
 		OKAY_ASSERT(pData);
 
-		return addBufferInternal(m_staticResources, OKAY_BUFFER_USAGE_STATIC, vertexSize, numVerticies, pData);
+		return addBufferInternal(OKAY_BUFFER_USAGE_STATIC, vertexSize, numVerticies, pData);
 	}
 
 	ResourceHandle GPUResourceManager::addIndexBuffer(uint32_t numIndicies, void* pData)
@@ -94,7 +92,7 @@ namespace Okay
 		OKAY_ASSERT(numIndicies);
 		OKAY_ASSERT(pData);
 
-		return addBufferInternal(m_staticResources, OKAY_BUFFER_USAGE_STATIC, sizeof(uint32_t), numIndicies, pData);
+		return addBufferInternal(OKAY_BUFFER_USAGE_STATIC, sizeof(uint32_t), numIndicies, pData);
 	}
 
 	void GPUResourceManager::updateBuffer(ResourceHandle handle, void* pData)
@@ -162,11 +160,11 @@ namespace Okay
 				2. CPU copy texture data into upload heap
 				3. Copy upload heap to target resource
 
-			Can create the upload heap at initialization, but it might not be used a lot during "gameplay"
+			Can create the upload heap at initialization, but it might not be used a lot after initialization
 			and might need to resize
 
 			Maybe can also try copying from CPU directly into target?
-			Since now we need to create a new upload heap everytime, so maybe worth ?
+			Since now we're creating a new upload heap everytime, so maybe worth ?
 		*/
 
 		D3D12_RESOURCE_DESC textureDesc = pDXResource->GetDesc();
@@ -254,8 +252,10 @@ namespace Okay
 		OKAY_ASSERT(resourceIndex < (uint16_t)getResourceList(usage).size());
 	}
 
-	ResourceHandle GPUResourceManager::addBufferInternal(std::vector<Resource>& resourceList, BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData)
+	ResourceHandle GPUResourceManager::addBufferInternal(BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData)
 	{
+		std::vector<Resource>& resourceList = getResourceList(usage);
+
 		uint32_t totalGPUByteSize = alignAddress32(elementSize * elementCount, BUFFER_DATA_ALIGNMENT);
 
 		uint16_t resourceIdx = INVALID_UINT16;

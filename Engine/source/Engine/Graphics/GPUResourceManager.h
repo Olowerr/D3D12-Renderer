@@ -67,7 +67,7 @@ namespace Okay
 		void createUploadResource(ID3D12Resource** ppResource, uint64_t byteSize);
 		void resizeUploadBuffer(uint64_t newSize);
 
-		ResourceHandle addBufferInternal(std::vector<Resource>& resourceList, BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData);
+		ResourceHandle addBufferInternal(BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData);
 		
 		D3D12_HEAP_TYPE getHeapType(BufferUsage usage);
 		HeapStore& getHeapStore(BufferUsage usage);
