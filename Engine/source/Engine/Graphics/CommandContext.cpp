@@ -1,5 +1,4 @@
 #include "CommandContext.h"
-#include "Engine/Okay.h"
 
 namespace Okay
 {

@@ -1,8 +1,6 @@
 #pragma once
 
-#include "Engine/Okay.h"
-
-#include <d3d12.h>
+#include "Engine/OkayD3D12.h"
 
 namespace Okay
 {

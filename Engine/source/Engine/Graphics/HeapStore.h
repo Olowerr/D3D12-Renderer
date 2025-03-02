@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Engine/Okay.h"
+#include "Engine/OkayD3D12.h"
 
 #include <d3d12.h>
 
@@ -12,7 +12,7 @@ namespace Okay
 {
 	struct Heap
 	{
-		ID3D12Heap* pHeap;
+		ID3D12Heap* pHeap = nullptr;
 		uint64_t usedHeapSize = INVALID_UINT64;
 	};
 

@@ -1,10 +1,8 @@
 #pragma once
 
-#include "Engine/Okay.h"
+#include "Engine/OkayD3D12.h"
 #include "CommandContext.h"
 #include "HeapStore.h"
-
-#include <d3d12.h>
 
 namespace Okay
 {
@@ -20,7 +18,7 @@ namespace Okay
 	{
 		uint32_t elementSize = INVALID_UINT32;
 		uint32_t numElements = INVALID_UINT32;
-		
+
 		uint64_t resourceOffset = INVALID_UINT64;
 	};
 
@@ -28,21 +26,6 @@ namespace Okay
 	{
 		ID3D12Resource* pDXResource = nullptr;
 		uint64_t usedSize = INVALID_UINT64;
-	};
-
-	enum TextureFlags : uint32_t
-	{
-		OKAY_TEXTURE_FLAG_NONE = 0,
-		OKAY_TEXTURE_FLAG_RENDER = 1,
-		OKAY_TEXTURE_FLAG_SHADER_READ = 2,
-		OKAY_TEXTURE_FLAG_DEPTH = 4,
-	};
-
-	enum BufferUsage : uint8_t
-	{
-		OKAY_BUFFER_USAGE_NONE = 0,
-		OKAY_BUFFER_USAGE_STATIC = 1,
-		OKAY_BUFFER_USAGE_DYNAMIC = 2,
 	};
 
 	class GPUResourceManager
@@ -62,6 +45,14 @@ namespace Okay
 		ResourceHandle addIndexBuffer(uint32_t numIndicies, void* pData);
 
 		void updateBuffer(ResourceHandle handle, void* pData);
+
+		ID3D12Resource* getDXResource(ResourceHandle handle);
+		D3D12_GPU_VIRTUAL_ADDRESS getVirtualAddress(ResourceHandle handle);
+
+		const ResourceAllocation& getAllocation(ResourceHandle handle);
+		uint32_t getTotalSize(ResourceHandle handle);
+
+
 
 	private:
 		void createUploadResource(ID3D12Resource** ppResource, uint64_t byteSize);

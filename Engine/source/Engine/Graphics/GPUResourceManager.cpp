@@ -106,6 +106,40 @@ namespace Okay
 		updateBufferInternal(*pResource, *pAllocation, *pUsage, pData);
 	}
 
+	ID3D12Resource* GPUResourceManager::getDXResource(ResourceHandle handle)
+	{
+		Resource* pResource = nullptr;
+		decodeHandle(handle, &pResource, nullptr, nullptr);
+
+		return pResource->pDXResource;
+	}
+
+	D3D12_GPU_VIRTUAL_ADDRESS GPUResourceManager::getVirtualAddress(ResourceHandle handle)
+	{
+		Resource* pResource = nullptr;
+		ResourceAllocation* pAllocation = nullptr;
+
+		decodeHandle(handle, &pResource, &pAllocation, nullptr);
+
+		return pResource->pDXResource->GetGPUVirtualAddress() + pAllocation->resourceOffset;
+	}
+
+	const ResourceAllocation& GPUResourceManager::getAllocation(ResourceHandle handle)
+	{
+		ResourceAllocation* pAllocation = nullptr;
+		decodeHandle(handle, nullptr, &pAllocation, nullptr);
+
+		return *pAllocation;
+	}
+
+	uint32_t GPUResourceManager::getTotalSize(ResourceHandle handle)
+	{
+		ResourceAllocation* pAllocation = nullptr;
+		decodeHandle(handle, nullptr, &pAllocation, nullptr);
+
+		return pAllocation->elementSize * pAllocation->numElements;
+	}
+
 	void GPUResourceManager::updateBufferInternal(const Resource& resource, const ResourceAllocation& allocation, BufferUsage usage, void* pData)
 	{
 		if (usage == OKAY_BUFFER_USAGE_STATIC)
@@ -238,9 +272,14 @@ namespace Okay
 
 		std::vector<Resource>& resourceList = getResourceList(usage);
 
-		*ppOutResource = &resourceList[resourceIndex];
-		*ppOutAllocation = &m_allocations[allocationIndex];
-		*ppOutUsage = &usage;
+		if (ppOutResource)
+			*ppOutResource = &resourceList[resourceIndex];
+		
+		if (ppOutAllocation)
+			*ppOutAllocation = &m_allocations[allocationIndex];
+		
+		if (ppOutUsage)
+			*ppOutUsage = &usage;
 	}
 
 	void GPUResourceManager::validateDecodedHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage)

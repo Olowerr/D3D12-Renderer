@@ -4,8 +4,8 @@
 #include "Engine/Scene/Scene.h"
 #include "GPUResourceManager.h"
 #include "CommandContext.h"
+#include "DescriptorHeapStore.h"
 
-#include <d3d12.h>
 #include <dxgi.h>
 #include <dxgi1_2.h>
 
@@ -39,6 +39,10 @@ namespace Okay
 	private:
 		CommandContext m_commandContext;
 		GPUResourceManager m_gpuResourceManager;
+
+		DescriptorHeapStore m_cbvSrvUavDescriptorHeapStore;
+		DescriptorHeapStore m_rtvDescriptorHeapStore;
+		DescriptorHeapStore m_dsvDescriptorHeapStore;
 
 	};
 }
