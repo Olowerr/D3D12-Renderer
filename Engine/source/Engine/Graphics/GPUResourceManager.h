@@ -4,15 +4,11 @@
 #include "CommandContext.h"
 #include "HeapStore.h"
 
+#include <string>
+
 namespace Okay
 {
 	typedef uint64_t ResourceHandle;
-
-	// Describes the byte offsets used for the different parts of a ResourceHandle
-	// Currently assuming each part 'only' needs 16 bits
-	constexpr uint8_t HANDLE_RESOURCE_IDX_OFFSET = 0;
-	constexpr uint8_t HANDLE_ALLOCATION_IDX_OFFSET = 2;
-	constexpr uint8_t HANDLE_USAGE_OFFSET = 4;
 
 	struct ResourceAllocation
 	{
@@ -25,6 +21,8 @@ namespace Okay
 	struct Resource
 	{
 		ID3D12Resource* pDXResource = nullptr;
+
+		uint64_t maxSize = INVALID_UINT64; // Can get max size through getCopyableFootPrints but kinda annoyinggg
 		uint64_t usedSize = INVALID_UINT64;
 	};
 

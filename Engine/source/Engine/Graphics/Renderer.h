@@ -30,16 +30,25 @@ namespace Okay
 		void enableGPUBasedValidation();
 
 		void createDevice(IDXGIFactory* pFactory);
+
 		void createSwapChain(IDXGIFactory* pFactory, const Window& window);
+		void fetchBackBuffersAndDSV();
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
+		
 		IDXGISwapChain1* m_pSwapChain = nullptr;
+
+		ID3D12Resource* m_backBuffers[NUM_BACKBUFFERS] = {};
+		uint8_t m_currentBackBuffer = NUM_BACKBUFFERS - 1;
+		DescriptorHandle m_rtvFirstDescriptor = INVALID_UINT32;
+		DescriptorHandle m_dsvDescriptor = INVALID_UINT32;
 
 	private:
 		CommandContext m_commandContext;
 		GPUResourceManager m_gpuResourceManager;
 
+		// Merge into 1?
 		DescriptorHeapStore m_cbvSrvUavDescriptorHeapStore;
 		DescriptorHeapStore m_rtvDescriptorHeapStore;
 		DescriptorHeapStore m_dsvDescriptorHeapStore;

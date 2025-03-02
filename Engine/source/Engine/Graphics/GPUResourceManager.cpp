@@ -1,5 +1,11 @@
 #include "GPUResourceManager.h"
 
+// Describes the "slots" of uint16_t used within a ResourceHandle
+// Currently assuming each part needs 16 bits
+constexpr uint8_t HANDLE_RESOURCE_IDX_SLOT = 0;
+constexpr uint8_t HANDLE_ALLOCATION_IDX_SLOT = 1;
+constexpr uint8_t HANDLE_USAGE_SLOT = 2;
+
 namespace Okay
 {
 	void GPUResourceManager::initialize(ID3D12Device* pDevice, CommandContext& commandContext)
@@ -41,7 +47,6 @@ namespace Okay
 		OKAY_ASSERT(width);
 		OKAY_ASSERT(height);
 		OKAY_ASSERT(TextureFlags(flags) != OKAY_TEXTURE_FLAG_NONE);
-		OKAY_ASSERT(pData);
 
 		uint16_t resourceIdx = (uint16_t)m_staticResources.size();
 		uint16_t allocationIdx = (uint16_t)m_allocations.size();
@@ -50,13 +55,38 @@ namespace Okay
 		ResourceAllocation& allocation = m_allocations.emplace_back();
 		allocation.resourceOffset = 0;
 
-		bool isDepth = CHECK_BIT(flags, OKAY_TEXTURE_FLAG_DEPTH);
-		resource.pDXResource = m_staticHeapStore.requestResource(width, height, 1, DXGI_FORMAT(format), isDepth);
+		bool isDepth = flags & OKAY_TEXTURE_FLAG_DEPTH;
+
+		D3D12_CLEAR_VALUE clearValue = {};
+		clearValue.Format = format;
+		D3D12_CLEAR_VALUE* pClearValue = nullptr;
+
+		// how to improve :thonk:
+		if (isDepth)
+		{
+			pClearValue = &clearValue;
+			clearValue.DepthStencil.Depth = 1.f;
+			clearValue.DepthStencil.Stencil = 0;
+		}
+		else if (flags & OKAY_TEXTURE_FLAG_RENDER)
+		{
+			pClearValue = &clearValue;
+			clearValue.Color[0] = 0.f;
+			clearValue.Color[1] = 0.f;
+			clearValue.Color[2] = 0.f;
+			clearValue.Color[3] = 0.f;
+		}
+
+		resource.pDXResource = m_staticHeapStore.requestResource(width, height, 1, DXGI_FORMAT(format), pClearValue, isDepth);
 
 		D3D12_RESOURCE_DESC desc = resource.pDXResource->GetDesc();
 		m_pDevice->GetCopyableFootprints(&desc, 0, 1, 0, nullptr, nullptr, nullptr, &resource.usedSize);
+		resource.maxSize = resource.usedSize;
 
-		updateTexture(resource.pDXResource, (unsigned char*)pData);
+		if (pData)
+		{
+			updateTexture(resource.pDXResource, (unsigned char*)pData);
+		}
 
 		return generateHandle(resourceIdx, allocationIdx, OKAY_BUFFER_USAGE_STATIC);
 	}
@@ -301,28 +331,22 @@ namespace Okay
 	ResourceHandle GPUResourceManager::generateHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage)
 	{
 		ResourceHandle handle = 0;
-		uint8_t* pHandle = (uint8_t*)&handle;
+		uint16_t* pHandle = (uint16_t*)&handle;
 
-		/* Not sure which version i prefer :thonk:
-		pHandle[HANDLE_RESOURCE_IDX_OFFSET] = resourceIndex;
-		pHandle[HANDLE_ALLOCATION_IDX_OFFSET] = resourceIndex;
-		pHandle[HANDLE_USAGE_OFFSET] = resourceIndex;
-		*/
-
-		*(pHandle + HANDLE_RESOURCE_IDX_OFFSET) = (uint8_t)resourceIndex;
-		*(pHandle + HANDLE_ALLOCATION_IDX_OFFSET) = (uint8_t)allocationIndex;
-		*(pHandle + HANDLE_USAGE_OFFSET) = (uint8_t)usage;
+		pHandle[HANDLE_RESOURCE_IDX_SLOT] = resourceIndex;
+		pHandle[HANDLE_ALLOCATION_IDX_SLOT] = allocationIndex;
+		pHandle[HANDLE_USAGE_SLOT] = usage;
 
 		return handle;
 	}
 
 	void GPUResourceManager::decodeHandle(ResourceHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation, BufferUsage** ppOutUsage)
 	{
-		uint8_t* pHandle = (uint8_t*)&handle;
+		uint16_t* pHandle = (uint16_t*)&handle;
 
-		uint16_t resourceIndex = *(pHandle + HANDLE_RESOURCE_IDX_OFFSET);
-		uint16_t allocationIndex = *(pHandle + HANDLE_ALLOCATION_IDX_OFFSET);
-		BufferUsage usage = (BufferUsage) *(pHandle + HANDLE_USAGE_OFFSET);
+		uint16_t resourceIndex = pHandle[HANDLE_RESOURCE_IDX_SLOT];
+		uint16_t allocationIndex = pHandle[HANDLE_ALLOCATION_IDX_SLOT];
+		BufferUsage usage = (BufferUsage)pHandle[HANDLE_USAGE_SLOT];
 
 		validateDecodedHandle(resourceIndex, allocationIndex, usage);
 
@@ -358,8 +382,7 @@ namespace Okay
 
 		for (uint16_t i = 0; i < (uint16_t)resourceList.size(); i++)
 		{
-			uint64_t resourceTotalSize = resourceList[i].pDXResource->GetDesc().Width;
-			if ((uint64_t)totalGPUByteSize < resourceTotalSize - resourceList[i].usedSize)
+			if ((uint64_t)totalGPUByteSize < resourceList[i].maxSize - resourceList[i].usedSize)
 			{
 				resourceIdx = i;
 				break;
@@ -374,8 +397,9 @@ namespace Okay
 			uint64_t allocationSize = std::max((uint64_t)totalGPUByteSize, (uint64_t)RESOURCE_PLACEMENT_ALIGNMENT);
 			HeapStore& heapStore = getHeapStore(usage);
 
-			resourceList[resourceIdx].pDXResource = heapStore.requestResource(allocationSize, 1, 1, DXGI_FORMAT_UNKNOWN, false);
+			resourceList[resourceIdx].pDXResource = heapStore.requestResource(allocationSize, 1, 1, DXGI_FORMAT_UNKNOWN, nullptr, false);
 			resourceList[resourceIdx].usedSize = 0;
+			resourceList[resourceIdx].maxSize = allocationSize;
 		}
 
 		ResourceAllocation& allocation = m_allocations.emplace_back();

@@ -20,12 +20,16 @@ namespace Okay
 		DX_CHECK(CreateDXGIFactory(IID_PPV_ARGS(&pFactory)));
 
 		createDevice(pFactory);
-
 		m_commandContext.initialize(m_pDevice);
+
+		createSwapChain(pFactory, window);
+
 		m_gpuResourceManager.initialize(m_pDevice, m_commandContext);
 		m_cbvSrvUavDescriptorHeapStore.initialize(m_pDevice, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 10);
 		m_rtvDescriptorHeapStore.initialize(m_pDevice, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 10);
 		m_dsvDescriptorHeapStore.initialize(m_pDevice, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 10);
+
+		fetchBackBuffersAndDSV();
 
 		ResourceHandle handle = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 30000, nullptr);
 		ResourceHandle handle1 = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 30000, nullptr);
@@ -76,6 +80,10 @@ namespace Okay
 		m_rtvDescriptorHeapStore.shutdown();
 		m_dsvDescriptorHeapStore.shutdown();
 
+		for (uint32_t i = 0; i < NUM_BACKBUFFERS; i++)
+			D3D12_RELEASE(m_backBuffers[i]);
+
+		D3D12_RELEASE(m_pSwapChain);
 		D3D12_RELEASE(m_pDevice);
 	}
 	
@@ -124,7 +132,32 @@ namespace Okay
 		swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
 		swapChainDesc.Flags = 0;
 
-		DX_CHECK(pFactory2->CreateSwapChainForHwnd(m_pDevice, window.getHWND(), &swapChainDesc, nullptr, nullptr, &m_pSwapChain));
+		DX_CHECK(pFactory2->CreateSwapChainForHwnd(m_commandContext.getCommandQueue(), window.getHWND(), &swapChainDesc, nullptr, nullptr, &m_pSwapChain));
+
+		D3D12_RELEASE(pFactory2);
+	}
+
+	void Renderer::fetchBackBuffersAndDSV()
+	{
+		DescriptorDesc backBufferRTVs[NUM_BACKBUFFERS] = {};
+
+		for (uint32_t i = 0; i < NUM_BACKBUFFERS; i++)
+		{
+			DX_CHECK(m_pSwapChain->GetBuffer(i, IID_PPV_ARGS(&m_backBuffers[i])));
+
+			backBufferRTVs[i].type = OKAY_DESCRIPTOR_TYPE_RTV;
+			backBufferRTVs[i].nullDesc = true;
+			backBufferRTVs[i].pDXResource = m_backBuffers[i];
+		}
+
+		m_rtvFirstDescriptor = m_rtvDescriptorHeapStore.createDescriptors(NUM_BACKBUFFERS, backBufferRTVs);
+
+		// Create depth stencil texture & descriptor
+		D3D12_RESOURCE_DESC resourceDesc = m_backBuffers[0]->GetDesc();
+		ResourceHandle dsHandle = m_gpuResourceManager.addTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
+
+		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsHandle, OKAY_DESCRIPTOR_TYPE_DSV, true);
+		m_dsvDescriptor = m_dsvDescriptorHeapStore.createDescriptors(1, &dsvDesc);
 	}
 
 	void Renderer::enableDebugLayer()

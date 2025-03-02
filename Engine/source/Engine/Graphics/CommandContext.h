@@ -14,6 +14,7 @@ namespace Okay
 		void shutdown();
 	
 		ID3D12GraphicsCommandList* getCommandList();
+		ID3D12CommandQueue* getCommandQueue();
 
 		void flush();
 	

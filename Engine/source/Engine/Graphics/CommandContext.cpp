@@ -31,6 +31,11 @@ namespace Okay
 		return m_pCommandList;
 	}
 
+	ID3D12CommandQueue* CommandContext::getCommandQueue()
+	{
+		return m_pCommandQueue;
+	}
+
 	void CommandContext::flush()
 	{
 		execute();

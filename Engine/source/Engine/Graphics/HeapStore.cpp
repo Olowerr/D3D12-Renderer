@@ -24,7 +24,7 @@ namespace Okay
 		m_heapType = D3D12_HEAP_TYPE_DEFAULT;
 	}
 	
-	ID3D12Resource* HeapStore::requestResource(uint64_t width, uint32_t height, uint32_t mips, DXGI_FORMAT format, bool isDepth)
+	ID3D12Resource* HeapStore::requestResource(uint64_t width, uint32_t height, uint32_t mips, DXGI_FORMAT format, D3D12_CLEAR_VALUE* pClearValue, bool isDepth)
 	{
 		bool isBuffer = format == DXGI_FORMAT_UNKNOWN;
 
@@ -52,10 +52,9 @@ namespace Okay
 		Heap& heap = getSufficientHeap(totalBytes);
 
 		ID3D12Resource* pResource = nullptr;
-		DX_CHECK(m_pDevice->CreatePlacedResource(heap.pHeap, heap.usedHeapSize, &resourceDesc, initialState, nullptr, IID_PPV_ARGS(&pResource)));
+		DX_CHECK(m_pDevice->CreatePlacedResource(heap.pHeap, heap.usedHeapSize, &resourceDesc, initialState, pClearValue, IID_PPV_ARGS(&pResource)));
 
-		uint32_t alignment = isBuffer ? BUFFER_DATA_ALIGNMENT : TEXTURE_DATA_ALIGNMENT;
-		heap.usedHeapSize = Okay::alignAddress64(heap.usedHeapSize + totalBytes, alignment);
+		heap.usedHeapSize = Okay::alignAddress64(heap.usedHeapSize + totalBytes, RESOURCE_PLACEMENT_ALIGNMENT);
 
 		return pResource;
 	}

@@ -15,8 +15,6 @@
 		}																						\
 	}0
 
-#define CHECK_BIT(num, pos)	((num) & 1<<(pos))
-
 namespace Okay
 {
 	struct Vertex
