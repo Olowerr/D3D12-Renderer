@@ -52,7 +52,7 @@ namespace Okay
 		const ResourceAllocation& getAllocation(ResourceHandle handle);
 		uint32_t getTotalSize(ResourceHandle handle);
 
-
+		DescriptorDesc createDescriptorDesc(ResourceHandle handle, DescriptorType type, bool nullDesc);
 
 	private:
 		void createUploadResource(ID3D12Resource** ppResource, uint64_t byteSize);

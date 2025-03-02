@@ -140,6 +140,62 @@ namespace Okay
 		return pAllocation->elementSize * pAllocation->numElements;
 	}
 
+	DescriptorDesc GPUResourceManager::createDescriptorDesc(ResourceHandle handle, DescriptorType type, bool nullDesc)
+	{
+		// handle asserted in decodeHandle
+		OKAY_ASSERT(type != OKAY_DESCRIPTOR_TYPE_NONE);
+
+		Resource* pResource = nullptr;
+		ResourceAllocation* pAllocation = nullptr;
+		BufferUsage* pUsage = nullptr;
+
+		decodeHandle(handle, &pResource, &pAllocation, &pUsage);
+
+		DescriptorDesc desc = {};
+
+		desc.type = type;
+		desc.nullDesc = nullDesc;
+		desc.pDXResource = pResource->pDXResource;
+
+		if (nullDesc)
+		{
+			return desc;
+		}
+
+		switch (type)
+		{
+		case OKAY_DESCRIPTOR_TYPE_SRV: // Assuming it's a structured buffer, textures should pass in nulLDesc as true
+			desc.srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+			desc.srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+			desc.srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+
+			desc.srvDesc.Buffer.FirstElement = 0; // might not be...or?
+			desc.srvDesc.Buffer.NumElements = pAllocation->numElements;
+			desc.srvDesc.Buffer.StructureByteStride = pAllocation->elementSize;
+			desc.srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+			break;
+
+		case OKAY_DESCRIPTOR_TYPE_CBV:
+			desc.cbvDesc.BufferLocation = pResource->pDXResource->GetGPUVirtualAddress() + pAllocation->resourceOffset;
+			desc.cbvDesc.SizeInBytes = alignAddress32(pAllocation->elementSize * pAllocation->numElements, BUFFER_DATA_ALIGNMENT);
+			break;
+
+		case OKAY_DESCRIPTOR_TYPE_UAV:
+			OKAY_ASSERT(false); // TODO: Implement UAVs
+			break;
+
+		case OKAY_DESCRIPTOR_TYPE_RTV:
+			OKAY_ASSERT(false); // RTVs should set nullDesc to true, atleast for now
+			break;
+
+		case OKAY_DESCRIPTOR_TYPE_DSV:
+			OKAY_ASSERT(false); // DSVs should set nullDesc to true, atleast for now
+			break;
+		}
+
+		return desc;
+	}
+
 	void GPUResourceManager::updateBufferInternal(const Resource& resource, const ResourceAllocation& allocation, BufferUsage usage, void* pData)
 	{
 		if (usage == OKAY_BUFFER_USAGE_STATIC)

@@ -43,6 +43,5 @@ namespace Okay
 		DescriptorHeapStore m_cbvSrvUavDescriptorHeapStore;
 		DescriptorHeapStore m_rtvDescriptorHeapStore;
 		DescriptorHeapStore m_dsvDescriptorHeapStore;
-
 	};
 }
