@@ -7,13 +7,10 @@ constexpr uint8_t HANDLE_DESCRIPTOR_IDX_SLOT = 1;
 
 namespace Okay
 {
-	void DescriptorHeapStore::initialize(ID3D12Device* pDevice, D3D12_DESCRIPTOR_HEAP_TYPE type, uint16_t numSlots)
+	void DescriptorHeapStore::initialize(ID3D12Device* pDevice, uint16_t numSlots)
 	{
 		m_pDevice = pDevice;
-		m_type = type;
 		m_creationSlots = numSlots;
-
-		m_incrementSize = pDevice->GetDescriptorHandleIncrementSize(type);
 	}
 
 	void DescriptorHeapStore::shutdown()
@@ -26,13 +23,13 @@ namespace Okay
 		m_pDevice = nullptr;
 	}
 
-	DescriptorHandle DescriptorHeapStore::createDescriptors(uint32_t numDescriptors, const DescriptorDesc* pDescs)
+	DescriptorHandle DescriptorHeapStore::createDescriptors(uint32_t numDescriptors, const DescriptorDesc* pDescs, D3D12_DESCRIPTOR_HEAP_TYPE type)
 	{
-		uint16_t heapIdx = getSufficientDescriptorHeap(numDescriptors);
+		uint16_t heapIdx = getSufficientDescriptorHeap(numDescriptors, type);
 		DescriptorHeap& heap = m_descriptorHeaps[heapIdx];
 
 		D3D12_CPU_DESCRIPTOR_HANDLE descriptorHandle = heap.pDXDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-		descriptorHandle.ptr += (uint64_t)heap.usedDescriptorSlots * m_incrementSize;
+		descriptorHandle.ptr += (uint64_t)heap.usedDescriptorSlots * heap.incrementSize;
 
 		for (uint32_t i = 0; i < numDescriptors; i++)
 		{
@@ -64,7 +61,7 @@ namespace Okay
 			}
 
 			heap.usedDescriptorSlots += 1;
-			descriptorHandle.ptr += m_incrementSize;
+			descriptorHandle.ptr += heap.incrementSize;
 		}
 
 		return encodeHandle(heapIdx, (uint16_t)heap.usedDescriptorSlots - numDescriptors);
@@ -72,69 +69,72 @@ namespace Okay
 
 	D3D12_CPU_DESCRIPTOR_HANDLE DescriptorHeapStore::getCPUHandle(DescriptorHandle handle)
 	{
-		DescriptorHeap* pDewscriptorHeao = nullptr;
+		DescriptorHeap* pDescriptorHeap = nullptr;
 		uint16_t descriptorIndex = INVALID_UINT16;
 
-		decodeHandle(handle, &pDewscriptorHeao, &descriptorIndex);
+		decodeHandle(handle, &pDescriptorHeap, &descriptorIndex);
 
-		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = pDewscriptorHeao->pDXDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-		cpuHandle.ptr += (uint64_t)descriptorIndex * m_incrementSize;
+		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = pDescriptorHeap->pDXDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+		cpuHandle.ptr += (uint64_t)descriptorIndex * pDescriptorHeap->incrementSize;
 
 		return cpuHandle;
 	}
 
 	D3D12_GPU_DESCRIPTOR_HANDLE DescriptorHeapStore::getGPUHandle(DescriptorHandle handle)
 	{
-		DescriptorHeap* pDewscriptorHeao = nullptr;
+		DescriptorHeap* pDescriptorHeap = nullptr;
 		uint16_t descriptorIndex = INVALID_UINT16;
 
-		decodeHandle(handle, &pDewscriptorHeao, &descriptorIndex);
+		decodeHandle(handle, &pDescriptorHeap, &descriptorIndex);
 
-		D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = pDewscriptorHeao->pDXDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
-		gpuHandle.ptr += (uint64_t)descriptorIndex * m_incrementSize;
+		D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = pDescriptorHeap->pDXDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+		gpuHandle.ptr += (uint64_t)descriptorIndex * pDescriptorHeap->incrementSize;
 
 		return gpuHandle;
 	}
 
-	uint16_t DescriptorHeapStore::getSufficientDescriptorHeap(uint16_t slots)
+	uint16_t DescriptorHeapStore::getSufficientDescriptorHeap(uint16_t slots, D3D12_DESCRIPTOR_HEAP_TYPE type)
 	{
 		for (uint32_t i = 0; i < (uint32_t)m_descriptorHeaps.size(); i++)
 		{
-			if (slots <= m_descriptorHeaps[i].maxDescriptors - m_descriptorHeaps[i].usedDescriptorSlots)
+			uint16_t availableSlots = m_descriptorHeaps[i].maxDescriptors - m_descriptorHeaps[i].usedDescriptorSlots;
+			if (type == m_descriptorHeaps[i].type && slots <= availableSlots)
 			{
 				return i;
 			}
 		}
 
-		return createNewDescriptorHeap(std::max(slots, m_creationSlots));
+		return createNewDescriptorHeap(std::max(slots, m_creationSlots), type);
 	}
 
-	uint16_t DescriptorHeapStore::createNewDescriptorHeap(uint16_t slots)
+	uint16_t DescriptorHeapStore::createNewDescriptorHeap(uint16_t slots, D3D12_DESCRIPTOR_HEAP_TYPE type)
 	{
 		DescriptorHeap& heap = m_descriptorHeaps.emplace_back();
 
 		D3D12_DESCRIPTOR_HEAP_DESC desc{};
-		desc.Type = m_type;
+		desc.Type = type;
 		desc.NumDescriptors = (uint32_t)slots;
 		desc.NodeMask = 0;
-		desc.Flags = m_type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ?
+		desc.Flags = type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ? // Unsure if this "should" actually be handled like this :thonk:
 			D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 
 		DX_CHECK(m_pDevice->CreateDescriptorHeap(&desc, IID_PPV_ARGS(&heap.pDXDescriptorHeap)));
 
 		heap.maxDescriptors = slots;
 		heap.usedDescriptorSlots = 0;
+		heap.type = type;
+		heap.incrementSize = m_pDevice->GetDescriptorHandleIncrementSize(type);
 
 		return (uint8_t)m_descriptorHeaps.size() - 1;
 	}
 
-	DescriptorHandle DescriptorHeapStore::encodeHandle(uint16_t heapindex, uint16_t descriptorIndex)
+	DescriptorHandle DescriptorHeapStore::encodeHandle(uint16_t heapIndex, uint16_t descriptorIndex)
 	{
 		DescriptorHandle handle = 0;
 		uint16_t* pHandle = (uint16_t*)&handle;
 
-		pHandle[HANDLE_HEAP_IDX_SLOT] = heapindex;
-		pHandle[HANDLE_DESCRIPTOR_IDX_SLOT] = heapindex;
+		pHandle[HANDLE_HEAP_IDX_SLOT] = heapIndex;
+		pHandle[HANDLE_DESCRIPTOR_IDX_SLOT] = descriptorIndex;
 
 		return handle;
 	}
@@ -152,7 +152,7 @@ namespace Okay
 			*ppOutDescriptorHeap = &m_descriptorHeaps[heapIndex];
 
 		if (pOutDescriptorIndex)
-			*pOutDescriptorIndex = pHandle[descriptorIndex];
+			*pOutDescriptorIndex = descriptorIndex;
 	}
 
 	void DescriptorHeapStore::validateDecodedHandle(uint16_t heapIndex, uint16_t descriptorIndex)

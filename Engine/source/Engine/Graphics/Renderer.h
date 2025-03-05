@@ -53,10 +53,7 @@ namespace Okay
 		CommandContext m_commandContext;
 		GPUResourceManager m_gpuResourceManager;
 
-		// Merge into 1?
-		DescriptorHeapStore m_cbvSrvUavDescriptorHeapStore;
-		DescriptorHeapStore m_rtvDescriptorHeapStore;
-		DescriptorHeapStore m_dsvDescriptorHeapStore;
+		DescriptorHeapStore m_descriptorHeapStore;
 
 		uint32_t m_cbvSrvUavDescriptorSize = INVALID_UINT32;
 		uint32_t m_rtvDescriptorSize = INVALID_UINT32;

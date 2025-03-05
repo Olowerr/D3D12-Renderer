@@ -54,7 +54,7 @@ namespace Okay
 			D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
 		};
 
-		bool nullDesc = false; // convenience, true means nullptr desc argument during creation
+		bool nullDesc = true; // convenience, true means nullptr desc argument during creation
 		ID3D12Resource* pDXResource = nullptr; // Some views need the resource for creation
 	};
 

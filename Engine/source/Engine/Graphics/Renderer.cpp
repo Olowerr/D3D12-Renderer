@@ -29,9 +29,7 @@ namespace Okay
 		createSwapChain(pFactory, window);
 
 		m_gpuResourceManager.initialize(m_pDevice, m_commandContext);
-		m_cbvSrvUavDescriptorHeapStore.initialize(m_pDevice, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 10);
-		m_rtvDescriptorHeapStore.initialize(m_pDevice, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 10);
-		m_dsvDescriptorHeapStore.initialize(m_pDevice, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 10);
+		m_descriptorHeapStore.initialize(m_pDevice, 10);
 
 		fetchBackBuffersAndDSV();
 
@@ -45,9 +43,7 @@ namespace Okay
 		m_commandContext.shutdown();
 		m_gpuResourceManager.shutdown();
 
-		m_cbvSrvUavDescriptorHeapStore.shutdown();
-		m_rtvDescriptorHeapStore.shutdown();
-		m_dsvDescriptorHeapStore.shutdown();
+		m_descriptorHeapStore.shutdown();
 
 		for (uint32_t i = 0; i < NUM_BACKBUFFERS; i++)
 			D3D12_RELEASE(m_backBuffers[i]);
@@ -68,8 +64,8 @@ namespace Okay
 		m_currentBackBuffer = (m_currentBackBuffer + 1) % NUM_BACKBUFFERS;
 		m_commandContext.transitionResource(m_backBuffers[m_currentBackBuffer], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-		D3D12_CPU_DESCRIPTOR_HANDLE dsvDescriptorHandle = m_dsvDescriptorHeapStore.getCPUHandle(m_dsvDescriptor);
-		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptorCPUHandle = m_rtvDescriptorHeapStore.getCPUHandle(m_rtvFirstDescriptor);
+		D3D12_CPU_DESCRIPTOR_HANDLE dsvDescriptorHandle = m_descriptorHeapStore.getCPUHandle(m_dsvDescriptor);
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptorCPUHandle = m_descriptorHeapStore.getCPUHandle(m_rtvFirstDescriptor);
 		rtvDescriptorCPUHandle.ptr += (uint64_t)m_currentBackBuffer * m_rtvDescriptorSize;
 
 		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
@@ -149,18 +145,17 @@ namespace Okay
 			DX_CHECK(m_pSwapChain->GetBuffer(i, IID_PPV_ARGS(&m_backBuffers[i])));
 
 			backBufferRTVs[i].type = OKAY_DESCRIPTOR_TYPE_RTV;
-			backBufferRTVs[i].nullDesc = true;
 			backBufferRTVs[i].pDXResource = m_backBuffers[i];
 		}
 
-		m_rtvFirstDescriptor = m_rtvDescriptorHeapStore.createDescriptors(NUM_BACKBUFFERS, backBufferRTVs);
+		m_rtvFirstDescriptor = m_descriptorHeapStore.createDescriptors(NUM_BACKBUFFERS, backBufferRTVs, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
 		// Create depth stencil texture & descriptor
 		D3D12_RESOURCE_DESC resourceDesc = m_backBuffers[0]->GetDesc();
 		ResourceHandle dsHandle = m_gpuResourceManager.addTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
 
 		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsHandle, OKAY_DESCRIPTOR_TYPE_DSV, true);
-		m_dsvDescriptor = m_dsvDescriptorHeapStore.createDescriptors(1, &dsvDesc);
+		m_dsvDescriptor = m_descriptorHeapStore.createDescriptors(1, &dsvDesc, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
 		ID3D12Resource* pDsvResource = m_gpuResourceManager.getDXResource(dsHandle);
 		m_commandContext.transitionResource(pDsvResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_DEPTH_WRITE);
