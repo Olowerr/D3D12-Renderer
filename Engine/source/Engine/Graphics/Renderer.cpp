@@ -7,10 +7,6 @@ namespace Okay
 	/* TODO:
 	* ? Merge all the "add...Buffer" functions in GPUResourceManager into addBuffer
 		* Takes in same parameters as current addStructuredBuffer()
-	* ? Merge the three heap stores into 1
-		* I'm not sure i like having 3 just chilling there?
-		* but in a way kinda nice, but :thonk:
-
 	*/
 
 	void Renderer::initialize(const Window& window)
@@ -109,6 +105,9 @@ namespace Okay
 		}
 
 		D3D12CreateDevice(pAdapter, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&m_pDevice));
+
+		logAdapterInfo(pAdapter);
+
 		D3D12_RELEASE(pAdapter);
 	}
 
@@ -159,6 +158,18 @@ namespace Okay
 
 		ID3D12Resource* pDsvResource = m_gpuResourceManager.getDXResource(dsHandle);
 		m_commandContext.transitionResource(pDsvResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+	}
+
+	void Renderer::logAdapterInfo(IDXGIAdapter* pAdapter)
+	{
+		DXGI_ADAPTER_DESC adapterDesc{};
+		pAdapter->GetDesc(&adapterDesc);
+
+		printf("-- GPU INFO --\n");
+		printf("Name: %ws\n", adapterDesc.Description);
+		printf("Dedicated Video Memory: %.2f GB\n", adapterDesc.DedicatedVideoMemory / 1'000'000'000.f);
+		printf("Dedicated System Memory: %.2f GB\n", adapterDesc.DedicatedSystemMemory / 1'000'000'000.f);
+		printf("Shared System Memory: %.2f GB\n", adapterDesc.SharedSystemMemory / 1'000'000'000.f);
 	}
 
 	void Renderer::enableDebugLayer()

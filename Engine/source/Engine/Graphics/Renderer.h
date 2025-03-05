@@ -39,6 +39,8 @@ namespace Okay
 		void createSwapChain(IDXGIFactory* pFactory, const Window& window);
 		void fetchBackBuffersAndDSV();
 
+		void logAdapterInfo(IDXGIAdapter* pAdapter);
+
 	private:
 		ID3D12Device* m_pDevice = nullptr;
 		
