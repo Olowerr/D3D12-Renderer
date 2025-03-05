@@ -26,6 +26,11 @@ namespace Okay
 		void render(const Scene& scene);
 
 	private:
+
+		void preRender();
+		void renderScene(const Scene& scene);
+		void postRender();
+
 		void enableDebugLayer();
 		void enableGPUBasedValidation();
 
@@ -52,5 +57,9 @@ namespace Okay
 		DescriptorHeapStore m_cbvSrvUavDescriptorHeapStore;
 		DescriptorHeapStore m_rtvDescriptorHeapStore;
 		DescriptorHeapStore m_dsvDescriptorHeapStore;
+
+		uint32_t m_cbvSrvUavDescriptorSize = INVALID_UINT32;
+		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
+		uint32_t m_dsvDescriptorSize = INVALID_UINT32;
 	};
 }

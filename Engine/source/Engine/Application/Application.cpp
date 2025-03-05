@@ -27,7 +27,7 @@ namespace Okay
 
 			onUpdate(0.f); // 0.f dt temporary
 
+			m_renderer.render(m_scene);
 		}
 	}
-
 }

@@ -7,6 +7,10 @@ namespace Okay
 	/* TODO:
 	* ? Merge all the "add...Buffer" functions in GPUResourceManager into addBuffer
 		* Takes in same parameters as current addStructuredBuffer()
+	* ? Merge the three heap stores into 1
+		* I'm not sure i like having 3 just chilling there?
+		* but in a way kinda nice, but :thonk:
+
 	*/
 
 	void Renderer::initialize(const Window& window)
@@ -31,44 +35,9 @@ namespace Okay
 
 		fetchBackBuffersAndDSV();
 
-		ResourceHandle handle = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 30000, nullptr);
-		ResourceHandle handle1 = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 30000, nullptr);
-		ResourceHandle handle2 = m_gpuResourceManager.addStructuredBuffer(OKAY_BUFFER_USAGE_STATIC, 24, 2000, nullptr);
-
-		uint32_t width = 4096;
-		uint32_t height = 4096;
-		unsigned char* pTestTextureData = new unsigned char[width * height * 4] {};
-		for (uint32_t y = 0; y < height; y++)
-		{
-			for (uint32_t x = 0; x < width; x++)
-			{
-				unsigned char r = (x / width) * 255;
-				unsigned char g = (y / height) * 255;
-				unsigned char b = 0; // (x / height) * 255;
-				unsigned char a = 0;
-
-				pTestTextureData[(y * width + x) * 4 + 0] = r;
-				pTestTextureData[(y * width + x) * 4 + 1] = g;
-				pTestTextureData[(y * width + x) * 4 + 2] = b;
-				pTestTextureData[(y * width + x) * 4 + 3] = a;
-			}
-		}
-
-		ResourceHandle textureHandle1 = m_gpuResourceManager.addTexture(width / 2, height / 2, DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, pTestTextureData);
-		ResourceHandle textureHandle2 = m_gpuResourceManager.addTexture(width, height, DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, pTestTextureData);
-
-		m_gpuResourceManager.updateBuffer(handle1, pTestTextureData);
-
-		DescriptorDesc descriptorDescs[5] =
-		{
-			m_gpuResourceManager.createDescriptorDesc(textureHandle1, OKAY_DESCRIPTOR_TYPE_SRV, true),
-			m_gpuResourceManager.createDescriptorDesc(textureHandle2, OKAY_DESCRIPTOR_TYPE_SRV, true),
-			m_gpuResourceManager.createDescriptorDesc(handle, OKAY_DESCRIPTOR_TYPE_CBV, false),
-			m_gpuResourceManager.createDescriptorDesc(handle2, OKAY_DESCRIPTOR_TYPE_SRV, false),
-			m_gpuResourceManager.createDescriptorDesc(handle1, OKAY_DESCRIPTOR_TYPE_CBV, false),
-		};
-
-		uint32_t tableStartSlot = m_cbvSrvUavDescriptorHeapStore.createDescriptors(5, descriptorDescs);
+		m_cbvSrvUavDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		m_rtvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		m_dsvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 	}
 	
 	void Renderer::shutdown()
@@ -89,6 +58,40 @@ namespace Okay
 	
 	void Renderer::render(const Scene& scene)
 	{
+		preRender();
+		renderScene(scene);
+		postRender();
+	}
+
+	void Renderer::preRender()
+	{
+		m_currentBackBuffer = (m_currentBackBuffer + 1) % NUM_BACKBUFFERS;
+		m_commandContext.transitionResource(m_backBuffers[m_currentBackBuffer], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+		D3D12_CPU_DESCRIPTOR_HANDLE dsvDescriptorHandle = m_dsvDescriptorHeapStore.getCPUHandle(m_dsvDescriptor);
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptorCPUHandle = m_rtvDescriptorHeapStore.getCPUHandle(m_rtvFirstDescriptor);
+		rtvDescriptorCPUHandle.ptr += (uint64_t)m_currentBackBuffer * m_rtvDescriptorSize;
+
+		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
+
+		float testClearColor[4] = { 0.9f, 0.5f, 0.4f, 1.f };
+		pCommandList->ClearRenderTargetView(rtvDescriptorCPUHandle, testClearColor, 0, nullptr);
+		pCommandList->ClearDepthStencilView(dsvDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+	}
+
+	void Renderer::renderScene(const Scene& scene)
+	{
+	}
+
+	void Renderer::postRender()
+	{
+		m_commandContext.transitionResource(m_backBuffers[m_currentBackBuffer], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
+
+		m_commandContext.execute();
+		m_pSwapChain->Present(1, 0);
+
+		m_commandContext.wait();
+		m_commandContext.reset();
 	}
 
 	void Renderer::createDevice(IDXGIFactory* pFactory)
@@ -158,6 +161,9 @@ namespace Okay
 
 		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsHandle, OKAY_DESCRIPTOR_TYPE_DSV, true);
 		m_dsvDescriptor = m_dsvDescriptorHeapStore.createDescriptors(1, &dsvDesc);
+
+		ID3D12Resource* pDsvResource = m_gpuResourceManager.getDXResource(dsHandle);
+		m_commandContext.transitionResource(pDsvResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	}
 
 	void Renderer::enableDebugLayer()
