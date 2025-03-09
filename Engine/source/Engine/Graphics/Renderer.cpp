@@ -1,6 +1,7 @@
 #include "Renderer.h"
 
 #include <dxgidebug.h>
+#include <d3dcompiler.h>
 
 namespace Okay
 {
@@ -32,6 +33,10 @@ namespace Okay
 		m_cbvSrvUavDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 		m_rtvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 		m_dsvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+
+		createPSO();
+
+		m_triangleColourRH = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 16, nullptr);
 	}
 	
 	void Renderer::shutdown()
@@ -46,10 +51,16 @@ namespace Okay
 
 		D3D12_RELEASE(m_pSwapChain);
 		D3D12_RELEASE(m_pDevice);
+
+		D3D12_RELEASE(m_pRootSignature);
+		D3D12_RELEASE(m_pPSO);
 	}
 	
 	void Renderer::render(const Scene& scene)
 	{
+		glm::vec4 colour = glm::vec4(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, 1.f);
+		m_gpuResourceManager.updateBuffer(m_triangleColourRH, &colour);
+
 		preRender();
 		renderScene(scene);
 		postRender();
@@ -60,19 +71,35 @@ namespace Okay
 		m_currentBackBuffer = (m_currentBackBuffer + 1) % NUM_BACKBUFFERS;
 		m_commandContext.transitionResource(m_backBuffers[m_currentBackBuffer], D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-		D3D12_CPU_DESCRIPTOR_HANDLE dsvDescriptorHandle = m_descriptorHeapStore.getCPUHandle(m_dsvDescriptor);
-		D3D12_CPU_DESCRIPTOR_HANDLE rtvDescriptorCPUHandle = m_descriptorHeapStore.getCPUHandle(m_rtvFirstDescriptor);
-		rtvDescriptorCPUHandle.ptr += (uint64_t)m_currentBackBuffer * m_rtvDescriptorSize;
+		D3D12_CPU_DESCRIPTOR_HANDLE dsvCPUDescriptorHandle = m_descriptorHeapStore.getCPUHandle(m_dsvDescriptor);
+		D3D12_CPU_DESCRIPTOR_HANDLE rtvCPUDescriptorHandle = m_descriptorHeapStore.getCPUHandle(m_rtvFirstDescriptor);
+		rtvCPUDescriptorHandle.ptr += (uint64_t)m_currentBackBuffer * m_rtvDescriptorSize;
 
 		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
 
 		float testClearColor[4] = { 0.9f, 0.5f, 0.4f, 1.f };
-		pCommandList->ClearRenderTargetView(rtvDescriptorCPUHandle, testClearColor, 0, nullptr);
-		pCommandList->ClearDepthStencilView(dsvDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+		pCommandList->ClearRenderTargetView(rtvCPUDescriptorHandle, testClearColor, 0, nullptr);
+		pCommandList->ClearDepthStencilView(dsvCPUDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+
+		pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		pCommandList->RSSetViewports(1, &m_viewport);
+		pCommandList->RSSetScissorRects(1, &m_scissorRect);
+
+		pCommandList->OMSetRenderTargets(1, &rtvCPUDescriptorHandle, false, &dsvCPUDescriptorHandle);
 	}
 
 	void Renderer::renderScene(const Scene& scene)
 	{
+		// temp
+		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
+		
+		pCommandList->SetGraphicsRootSignature(m_pRootSignature);
+		pCommandList->SetPipelineState(m_pPSO);
+
+		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_triangleColourRH));
+
+		pCommandList->DrawInstanced(3, 1, 0, 0);
 	}
 
 	void Renderer::postRender()
@@ -158,6 +185,21 @@ namespace Okay
 
 		ID3D12Resource* pDsvResource = m_gpuResourceManager.getDXResource(dsHandle);
 		m_commandContext.transitionResource(pDsvResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
+		// Find viewport & scissor rect
+		D3D12_RESOURCE_DESC backBufferDesc = m_backBuffers[0]->GetDesc();
+
+		m_viewport.TopLeftX = 0.f;
+		m_viewport.TopLeftY = 0.f;
+		m_viewport.Width = (float)backBufferDesc.Width;
+		m_viewport.Height = (float)backBufferDesc.Height;
+		m_viewport.MinDepth = 0;
+		m_viewport.MaxDepth = 1;
+
+		m_scissorRect.left = 0;
+		m_scissorRect.top = 0;
+		m_scissorRect.right = (LONG)backBufferDesc.Width;
+		m_scissorRect.bottom = (LONG)backBufferDesc.Height;
 	}
 
 	void Renderer::logAdapterInfo(IDXGIAdapter* pAdapter)
@@ -170,6 +212,146 @@ namespace Okay
 		printf("Dedicated Video Memory: %.2f GB\n", adapterDesc.DedicatedVideoMemory / 1'000'000'000.f);
 		printf("Dedicated System Memory: %.2f GB\n", adapterDesc.DedicatedSystemMemory / 1'000'000'000.f);
 		printf("Shared System Memory: %.2f GB\n", adapterDesc.SharedSystemMemory / 1'000'000'000.f);
+	}
+
+	D3D12_SHADER_BYTECODE Renderer::compileShader(std::filesystem::path path, std::string_view version, ID3DBlob** pShaderBlob)
+	{
+		ID3DBlob* pErrorBlob = nullptr;
+
+#ifdef _DEBUG
+		uint32_t flags1 = D3DCOMPILE_DEBUG;
+#else
+		uint32_t flags1 = D3DCOMPILE_OPTIMIZATION_LEVEL2;;
+#endif
+
+		HRESULT hr = D3DCompileFromFile(path.c_str(), nullptr, nullptr, "main", version.data(), flags1, 0, pShaderBlob, &pErrorBlob);
+		if (FAILED(hr))
+		{
+			const char* pErrorMsg = pErrorBlob ? (const char*)pErrorBlob->GetBufferPointer() : "No errors produced, file might have been found.";
+
+			printf("Shader Compilation failed\n    Path: %ls\n    Error: %s\n", path.c_str(), pErrorMsg);
+			OKAY_ASSERT(false);
+		}
+
+		D3D12_RELEASE(pErrorBlob);
+
+		D3D12_SHADER_BYTECODE shaderByteCode{};
+		shaderByteCode.pShaderBytecode = (*pShaderBlob)->GetBufferPointer();
+		shaderByteCode.BytecodeLength = (*pShaderBlob)->GetBufferSize();
+
+		return shaderByteCode;
+	}
+
+	void Renderer::createPSO()
+	{
+		D3D12_ROOT_PARAMETER triangleColourRootParam = {};
+		triangleColourRootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		triangleColourRootParam.Descriptor.ShaderRegister = 0;
+		triangleColourRootParam.Descriptor.RegisterSpace = 0;
+		triangleColourRootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		D3D12_ROOT_SIGNATURE_DESC rootDesc{};
+		rootDesc.NumParameters = 1;
+		rootDesc.pParameters = &triangleColourRootParam;
+		rootDesc.NumStaticSamplers = 0;
+		rootDesc.pStaticSamplers = nullptr;
+		rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+		ID3DBlob* pRootBlob = nullptr;
+		ID3DBlob* pErrorBlob = nullptr;
+
+		HRESULT hr = D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, &pRootBlob, &pErrorBlob);
+		if (FAILED(hr))
+		{
+			printf("Failed to serialize root signature: %s\n", (char*)pErrorBlob->GetBufferPointer());
+			OKAY_ASSERT(false);
+		}
+
+		DX_CHECK(m_pDevice->CreateRootSignature(0, pRootBlob->GetBufferPointer(), pRootBlob->GetBufferSize(), IID_PPV_ARGS(&m_pRootSignature)));
+
+		ID3DBlob* pVsShaderBlob = nullptr;
+		ID3DBlob* pPsShaderBlob = nullptr;
+
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc{};
+		pipelineDesc.pRootSignature = m_pRootSignature;
+
+		pipelineDesc.VS = Renderer::compileShader(SHADER_PATH / "VertexShader.hlsl", "vs_5_1", &pVsShaderBlob);
+		pipelineDesc.PS = Renderer::compileShader(SHADER_PATH / "PixelShader.hlsl", "ps_5_1", &pPsShaderBlob);
+
+		pipelineDesc.StreamOutput.pSODeclaration = nullptr;
+		pipelineDesc.StreamOutput.NumEntries = 0;
+		pipelineDesc.StreamOutput.pBufferStrides = nullptr;
+		pipelineDesc.StreamOutput.NumStrides = 0;
+		pipelineDesc.StreamOutput.RasterizedStream = 0;
+
+		pipelineDesc.BlendState.AlphaToCoverageEnable = false;
+		pipelineDesc.BlendState.IndependentBlendEnable = false;
+		pipelineDesc.NumRenderTargets = 1;
+
+		pipelineDesc.BlendState.RenderTarget[0].BlendEnable = false;
+		pipelineDesc.BlendState.RenderTarget[0].LogicOpEnable = false;
+		pipelineDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
+		pipelineDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
+		pipelineDesc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		pipelineDesc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+		pipelineDesc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+		pipelineDesc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		pipelineDesc.BlendState.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_NOOP;
+		pipelineDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+		pipelineDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+
+		pipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+		pipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+		pipelineDesc.RasterizerState.FrontCounterClockwise = false;
+		pipelineDesc.RasterizerState.DepthBias = 0;
+		pipelineDesc.RasterizerState.DepthBiasClamp = 0.0f;
+		pipelineDesc.RasterizerState.SlopeScaledDepthBias = 0.0f;
+		pipelineDesc.RasterizerState.DepthClipEnable = true;
+		pipelineDesc.RasterizerState.MultisampleEnable = false;
+		pipelineDesc.RasterizerState.AntialiasedLineEnable = false;
+		pipelineDesc.RasterizerState.ForcedSampleCount = 0;
+		pipelineDesc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+		pipelineDesc.DepthStencilState.DepthEnable = true;
+		pipelineDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+		pipelineDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+		pipelineDesc.DepthStencilState.StencilEnable = false;
+		pipelineDesc.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+		pipelineDesc.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+		pipelineDesc.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+		pipelineDesc.DepthStencilState.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+		pipelineDesc.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+		pipelineDesc.DepthStencilState.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+		pipelineDesc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+		pipelineDesc.DepthStencilState.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+		pipelineDesc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+		pipelineDesc.DepthStencilState.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+
+		pipelineDesc.InputLayout.pInputElementDescs = nullptr;
+		pipelineDesc.InputLayout.NumElements = 0;
+		pipelineDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+
+		pipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+		pipelineDesc.NumRenderTargets = 1;
+		pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+		pipelineDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+
+		pipelineDesc.SampleDesc.Count = 1;
+		pipelineDesc.SampleDesc.Quality = 0;
+
+		pipelineDesc.NodeMask = 0;
+		
+		pipelineDesc.CachedPSO.CachedBlobSizeInBytes = 0;
+		pipelineDesc.CachedPSO.pCachedBlob = nullptr;
+
+		pipelineDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		DX_CHECK(m_pDevice->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(&m_pPSO)));
+
+		D3D12_RELEASE(pVsShaderBlob);
+		D3D12_RELEASE(pPsShaderBlob);
 	}
 
 	void Renderer::enableDebugLayer()

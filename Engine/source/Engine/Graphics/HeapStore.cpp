@@ -44,17 +44,21 @@ namespace Okay
 
 		resourceDesc.Layout = isBuffer ? D3D12_TEXTURE_LAYOUT_ROW_MAJOR : D3D12_TEXTURE_LAYOUT_UNKNOWN;
 		resourceDesc.Flags = isDepth ? D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL : D3D12_RESOURCE_FLAG_NONE;
-
-		uint64_t totalBytes = INVALID_UINT64;
-		m_pDevice->GetCopyableFootprints(&resourceDesc, 0, 1, 0, nullptr, nullptr, nullptr, &totalBytes);
+		
+		/*
+			NOTE:
+			ID3D12Device::GetCopyableFootprints doesn't get the true total size of textures.
+			According to the docs of ID3D12Device::CreatePlacedResource we have to use ID3D12Device::GetResourceAllocationInfo to get the true allocation size of textures
+		*/
+		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &resourceDesc);
 
 		D3D12_RESOURCE_STATES initialState = m_heapType == D3D12_HEAP_TYPE_DEFAULT ? D3D12_RESOURCE_STATE_COPY_DEST : D3D12_RESOURCE_STATE_GENERIC_READ;
-		Heap& heap = getSufficientHeap(totalBytes);
+		Heap& heap = getSufficientHeap(resourceAllocationInfo.SizeInBytes);
 
 		ID3D12Resource* pResource = nullptr;
 		DX_CHECK(m_pDevice->CreatePlacedResource(heap.pHeap, heap.usedHeapSize, &resourceDesc, initialState, pClearValue, IID_PPV_ARGS(&pResource)));
 
-		heap.usedHeapSize = Okay::alignAddress64(heap.usedHeapSize + totalBytes, RESOURCE_PLACEMENT_ALIGNMENT);
+		heap.usedHeapSize = Okay::alignAddress64(heap.usedHeapSize + resourceAllocationInfo.SizeInBytes, RESOURCE_PLACEMENT_ALIGNMENT);
 
 		return pResource;
 	}
@@ -64,7 +68,9 @@ namespace Okay
 		for (uint64_t i = 0; i < m_heaps.size(); i++)
 		{
 			uint64_t heapSize = m_heaps[i].pHeap->GetDesc().SizeInBytes;
-			if (requiredSize < heapSize - m_heaps[i].usedHeapSize)
+			uint64_t availableSize = heapSize - m_heaps[i].usedHeapSize;
+
+			if (requiredSize < availableSize)
 			{
 				return m_heaps[i];
 			}

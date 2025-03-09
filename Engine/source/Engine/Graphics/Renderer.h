@@ -9,8 +9,12 @@
 #include <dxgi.h>
 #include <dxgi1_2.h>
 
+#include <filesystem>
+
 namespace Okay
 {
+	inline const std::filesystem::path SHADER_PATH = std::filesystem::path("..") / "Engine" / "resources" / "Shaders";
+
 	class Renderer
 	{
 	public:
@@ -42,6 +46,9 @@ namespace Okay
 		void logAdapterInfo(IDXGIAdapter* pAdapter);
 
 	private:
+		static D3D12_SHADER_BYTECODE compileShader(std::filesystem::path path, std::string_view version, ID3DBlob** pShaderBlob);
+
+	private:
 		ID3D12Device* m_pDevice = nullptr;
 		
 		IDXGISwapChain1* m_pSwapChain = nullptr;
@@ -50,6 +57,9 @@ namespace Okay
 		uint8_t m_currentBackBuffer = NUM_BACKBUFFERS - 1;
 		DescriptorHandle m_rtvFirstDescriptor = INVALID_UINT32;
 		DescriptorHandle m_dsvDescriptor = INVALID_UINT32;
+
+		D3D12_VIEWPORT m_viewport = {};
+		D3D12_RECT m_scissorRect = {};
 
 	private:
 		CommandContext m_commandContext;
@@ -60,5 +70,11 @@ namespace Okay
 		uint32_t m_cbvSrvUavDescriptorSize = INVALID_UINT32;
 		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
 		uint32_t m_dsvDescriptorSize = INVALID_UINT32;
+
+	private: // temp
+		ID3D12RootSignature* m_pRootSignature = nullptr;
+		ID3D12PipelineState* m_pPSO = nullptr;
+		ResourceHandle m_triangleColourRH = ResourceHandle(-1);
+		void createPSO();
 	};
 }

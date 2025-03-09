@@ -80,8 +80,10 @@ namespace Okay
 		resource.pDXResource = m_staticHeapStore.requestResource(width, height, 1, DXGI_FORMAT(format), pClearValue, isDepth);
 
 		D3D12_RESOURCE_DESC desc = resource.pDXResource->GetDesc();
-		m_pDevice->GetCopyableFootprints(&desc, 0, 1, 0, nullptr, nullptr, nullptr, &resource.usedSize);
-		resource.maxSize = resource.usedSize;
+		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &desc);
+
+		resource.usedSize = resourceAllocationInfo.SizeInBytes;
+		resource.maxSize = resourceAllocationInfo.SizeInBytes;
 
 		if (pData)
 		{
@@ -292,10 +294,13 @@ namespace Okay
 		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footPrint{};
 		uint64_t rowSizeInBytes = 0;
 		uint64_t resourceTotalSize = 0;
+
+
 		m_pDevice->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footPrint, nullptr, &rowSizeInBytes, &resourceTotalSize);
 
+		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &textureDesc);
 		ID3D12Resource* pUploadResource = nullptr;
-		createUploadResource(&pUploadResource, resourceTotalSize);
+		createUploadResource(&pUploadResource, resourceAllocationInfo.SizeInBytes);
 
 		D3D12_RANGE range = { 0, 0 };
 
@@ -382,7 +387,8 @@ namespace Okay
 
 		for (uint16_t i = 0; i < (uint16_t)resourceList.size(); i++)
 		{
-			if ((uint64_t)totalGPUByteSize < resourceList[i].maxSize - resourceList[i].usedSize)
+			uint64_t availableSize = resourceList[i].maxSize - resourceList[i].usedSize;
+			if ((uint64_t)totalGPUByteSize < availableSize)
 			{
 				resourceIdx = i;
 				break;
@@ -414,7 +420,7 @@ namespace Okay
 
 		resourceList[resourceIdx].usedSize += totalGPUByteSize;
 
-		return generateHandle(resourceIdx, allocationIdx, OKAY_BUFFER_USAGE_STATIC);
+		return generateHandle(resourceIdx, allocationIdx, usage);
 	}
 
 	D3D12_HEAP_TYPE GPUResourceManager::getHeapType(BufferUsage usage)

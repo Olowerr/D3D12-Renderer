@@ -22,7 +22,7 @@ namespace Okay
 	{
 		ID3D12Resource* pDXResource = nullptr;
 
-		uint64_t maxSize = INVALID_UINT64; // Can get max size through getCopyableFootPrints but kinda annoyinggg
+		uint64_t maxSize = INVALID_UINT64;
 		uint64_t usedSize = INVALID_UINT64;
 	};
 
