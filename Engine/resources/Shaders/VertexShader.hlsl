@@ -1,11 +1,23 @@
 
-static float3 VERTICIES[] = {
-	float3(-0.5f, -0.5f, 0.f),
-	float3(0.f, 0.5f, 0.f),
-	float3(0.5f, -0.5f, 0.0f),
+struct InputVertex
+{
+	float3 position;
+	float4 colour;
 };
 
-float4 main(uint vertexId : SV_VERTEXID) : SV_POSITION
+struct OutputVertex
 {
-	return float4(VERTICIES[vertexId], 1.f);
+	float4 svPosition : SV_POSITION;
+	float4 colour : COLOUR;
+};
+
+StructuredBuffer<InputVertex> verticies : register(t0, space0);
+
+OutputVertex main(uint vertexId : SV_VERTEXID)
+{
+	OutputVertex output;
+	output.svPosition = float4(verticies[vertexId].position, 1.f);
+	output.colour = verticies[vertexId].colour;
+
+	return output;
 }

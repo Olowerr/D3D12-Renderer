@@ -1,10 +1,10 @@
 
 cbuffer ColourCBuffer : register(b0, space0)
 {
-	float4 colour;
+	float4 cbColour;
 }
 
-float4 main() : SV_TARGET
+float4 main(float4 position : SV_POSITION, float4 colour : COLOUR) : SV_TARGET
 {
-	return colour;
+	return colour + cbColour;
 }

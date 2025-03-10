@@ -43,9 +43,8 @@ namespace Okay
 		void createSwapChain(IDXGIFactory* pFactory, const Window& window);
 		void fetchBackBuffersAndDSV();
 
-		void logAdapterInfo(IDXGIAdapter* pAdapter);
-
 	private:
+		static void logAdapterInfo(IDXGIAdapter* pAdapter);
 		static D3D12_SHADER_BYTECODE compileShader(std::filesystem::path path, std::string_view version, ID3DBlob** pShaderBlob);
 
 	private:
@@ -74,7 +73,8 @@ namespace Okay
 	private: // temp
 		ID3D12RootSignature* m_pRootSignature = nullptr;
 		ID3D12PipelineState* m_pPSO = nullptr;
-		ResourceHandle m_triangleColourRH = ResourceHandle(-1);
+		ResourceHandle m_triangleColourRH = INVALID_RH;
+		ResourceHandle m_vertexBufferRH = INVALID_RH;
 		void createPSO();
 	};
 }

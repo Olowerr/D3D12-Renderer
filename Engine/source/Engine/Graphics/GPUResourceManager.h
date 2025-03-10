@@ -9,6 +9,7 @@
 namespace Okay
 {
 	typedef uint64_t ResourceHandle;
+	constexpr ResourceHandle INVALID_RH = INVALID_UINT64;
 
 	struct ResourceAllocation
 	{

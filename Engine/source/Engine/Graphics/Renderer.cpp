@@ -2,6 +2,7 @@
 
 #include <dxgidebug.h>
 #include <d3dcompiler.h>
+#include <stdlib.h>
 
 namespace Okay
 {
@@ -36,7 +37,20 @@ namespace Okay
 
 		createPSO();
 
+		struct Vertex
+		{
+			glm::vec3 position;
+			glm::vec4 colour;
+		};
+
+		Vertex verticies[] = {
+			{ .position = glm::vec3(-0.5f, -0.5f, 0.f), .colour = glm::vec4(1.f, 0.f, 0.f, 1.f) },
+			{ .position = glm::vec3(0.f, 0.5f, 0.f), .colour = glm::vec4(0.f, 1.f, 0.f, 1.f) },
+			{ .position = glm::vec3(0.5f, -0.5f, 0.0f), .colour = glm::vec4(0.f, 0.f, 1.f, 1.f) },
+		};
+
 		m_triangleColourRH = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 16, nullptr);
+		m_vertexBufferRH = m_gpuResourceManager.addStructuredBuffer(OKAY_BUFFER_USAGE_STATIC, sizeof(verticies[0]), _countof(verticies), &verticies);
 	}
 	
 	void Renderer::shutdown()
@@ -98,6 +112,7 @@ namespace Okay
 		pCommandList->SetPipelineState(m_pPSO);
 
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_triangleColourRH));
+		pCommandList->SetGraphicsRootShaderResourceView(1, m_gpuResourceManager.getVirtualAddress(m_vertexBufferRH));
 
 		pCommandList->DrawInstanced(3, 1, 0, 0);
 	}
@@ -133,7 +148,7 @@ namespace Okay
 
 		D3D12CreateDevice(pAdapter, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&m_pDevice));
 
-		logAdapterInfo(pAdapter);
+		Renderer::logAdapterInfo(pAdapter);
 
 		D3D12_RELEASE(pAdapter);
 	}
@@ -211,7 +226,7 @@ namespace Okay
 		printf("Name: %ws\n", adapterDesc.Description);
 		printf("Dedicated Video Memory: %.2f GB\n", adapterDesc.DedicatedVideoMemory / 1'000'000'000.f);
 		printf("Dedicated System Memory: %.2f GB\n", adapterDesc.DedicatedSystemMemory / 1'000'000'000.f);
-		printf("Shared System Memory: %.2f GB\n", adapterDesc.SharedSystemMemory / 1'000'000'000.f);
+		printf("Shared System Memory: %.2f GB\n\n", adapterDesc.SharedSystemMemory / 1'000'000'000.f);
 	}
 
 	D3D12_SHADER_BYTECODE Renderer::compileShader(std::filesystem::path path, std::string_view version, ID3DBlob** pShaderBlob)
@@ -244,15 +259,21 @@ namespace Okay
 
 	void Renderer::createPSO()
 	{
-		D3D12_ROOT_PARAMETER triangleColourRootParam = {};
-		triangleColourRootParam.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		triangleColourRootParam.Descriptor.ShaderRegister = 0;
-		triangleColourRootParam.Descriptor.RegisterSpace = 0;
-		triangleColourRootParam.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		D3D12_ROOT_PARAMETER rootParams[2] = {};
+
+		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParams[0].Descriptor.ShaderRegister = 0;
+		rootParams[0].Descriptor.RegisterSpace = 0;
+		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		rootParams[1].Descriptor.ShaderRegister = 0;
+		rootParams[1].Descriptor.RegisterSpace = 0;
+		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
 		D3D12_ROOT_SIGNATURE_DESC rootDesc{};
-		rootDesc.NumParameters = 1;
-		rootDesc.pParameters = &triangleColourRootParam;
+		rootDesc.NumParameters = _countof(rootParams);
+		rootDesc.pParameters = rootParams;
 		rootDesc.NumStaticSamplers = 0;
 		rootDesc.pStaticSamplers = nullptr;
 		rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
