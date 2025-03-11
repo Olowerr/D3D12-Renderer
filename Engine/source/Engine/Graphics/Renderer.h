@@ -73,8 +73,9 @@ namespace Okay
 	private: // temp
 		ID3D12RootSignature* m_pRootSignature = nullptr;
 		ID3D12PipelineState* m_pPSO = nullptr;
-		ResourceHandle m_triangleColourRH = INVALID_RH;
-		ResourceHandle m_vertexBufferRH = INVALID_RH;
+		AllocationHandle m_triangleColourAH = INVALID_AH;
+		AllocationHandle m_vertexBufferAH = INVALID_AH;
+		AllocationHandle m_indexBufferAH = INVALID_RH;
 		void createPSO();
 	};
 }

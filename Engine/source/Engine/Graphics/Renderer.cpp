@@ -43,14 +43,26 @@ namespace Okay
 			glm::vec4 colour;
 		};
 
-		Vertex verticies[] = {
+		Vertex verticies[] = 
+		{
 			{ .position = glm::vec3(-0.5f, -0.5f, 0.f), .colour = glm::vec4(1.f, 0.f, 0.f, 1.f) },
-			{ .position = glm::vec3(0.f, 0.5f, 0.f), .colour = glm::vec4(0.f, 1.f, 0.f, 1.f) },
 			{ .position = glm::vec3(0.5f, -0.5f, 0.0f), .colour = glm::vec4(0.f, 0.f, 1.f, 1.f) },
+			{ .position = glm::vec3(0.f, 0.5f, 0.f), .colour = glm::vec4(0.f, 1.f, 0.f, 1.f) },
 		};
 
-		m_triangleColourRH = m_gpuResourceManager.addConstantBuffer(OKAY_BUFFER_USAGE_STATIC, 16, nullptr);
-		m_vertexBufferRH = m_gpuResourceManager.addStructuredBuffer(OKAY_BUFFER_USAGE_STATIC, sizeof(verticies[0]), _countof(verticies), &verticies);
+		uint32_t indicies[] = 
+		{
+			0, 2, 1
+		};
+
+
+		ResourceHandle triangleBufferRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, 1'000);
+		m_triangleColourAH = m_gpuResourceManager.addConstantBuffer(triangleBufferRH, 16, nullptr);
+		m_vertexBufferAH = m_gpuResourceManager.addStructuredBuffer(triangleBufferRH, sizeof(verticies[0]), _countof(verticies), &verticies);
+
+		ResourceHandle indexBufferRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, sizeof(indicies));
+		m_indexBufferAH = m_gpuResourceManager.addStructuredBuffer(indexBufferRH, sizeof(indicies[0]), _countof(indicies), &indicies);
+		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(indexBufferRH), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	}
 	
 	void Renderer::shutdown()
@@ -73,7 +85,7 @@ namespace Okay
 	void Renderer::render(const Scene& scene)
 	{
 		glm::vec4 colour = glm::vec4(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, 1.f);
-		m_gpuResourceManager.updateBuffer(m_triangleColourRH, &colour);
+		m_gpuResourceManager.updateBuffer(m_triangleColourAH, &colour);
 
 		preRender();
 		renderScene(scene);
@@ -95,6 +107,12 @@ namespace Okay
 		pCommandList->ClearRenderTargetView(rtvCPUDescriptorHandle, testClearColor, 0, nullptr);
 		pCommandList->ClearDepthStencilView(dsvCPUDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
+		D3D12_INDEX_BUFFER_VIEW ibView = {};
+		ibView.BufferLocation = m_gpuResourceManager.getVirtualAddress(m_indexBufferAH);
+		ibView.SizeInBytes = m_gpuResourceManager.getTotalSize(m_indexBufferAH);
+		ibView.Format = DXGI_FORMAT_R32_UINT;
+
+		pCommandList->IASetIndexBuffer(&ibView);
 		pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		pCommandList->RSSetViewports(1, &m_viewport);
@@ -111,10 +129,10 @@ namespace Okay
 		pCommandList->SetGraphicsRootSignature(m_pRootSignature);
 		pCommandList->SetPipelineState(m_pPSO);
 
-		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_triangleColourRH));
-		pCommandList->SetGraphicsRootShaderResourceView(1, m_gpuResourceManager.getVirtualAddress(m_vertexBufferRH));
+		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_triangleColourAH));
+		pCommandList->SetGraphicsRootShaderResourceView(1, m_gpuResourceManager.getVirtualAddress(m_vertexBufferAH));
 
-		pCommandList->DrawInstanced(3, 1, 0, 0);
+		pCommandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
 	}
 
 	void Renderer::postRender()
@@ -193,7 +211,7 @@ namespace Okay
 
 		// Create depth stencil texture & descriptor
 		D3D12_RESOURCE_DESC resourceDesc = m_backBuffers[0]->GetDesc();
-		ResourceHandle dsHandle = m_gpuResourceManager.addTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
+		ResourceHandle dsHandle = m_gpuResourceManager.createTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
 
 		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsHandle, OKAY_DESCRIPTOR_TYPE_DSV, true);
 		m_dsvDescriptor = m_descriptorHeapStore.createDescriptors(1, &dsvDesc, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);

@@ -8,8 +8,11 @@
 
 namespace Okay
 {
-	typedef uint64_t ResourceHandle;
-	constexpr ResourceHandle INVALID_RH = INVALID_UINT64;
+	typedef uint32_t AllocationHandle;
+	typedef uint16_t ResourceHandle;
+
+	constexpr uint32_t INVALID_AH = INVALID_UINT32;
+	constexpr uint32_t INVALID_RH = INVALID_UINT16;
 
 	struct ResourceAllocation
 	{
@@ -22,6 +25,7 @@ namespace Okay
 	struct Resource
 	{
 		ID3D12Resource* pDXResource = nullptr;
+		D3D12_HEAP_TYPE heapType = D3D12_HEAP_TYPE(-1);
 
 		uint64_t maxSize = INVALID_UINT64;
 		uint64_t usedSize = INVALID_UINT64;
@@ -36,41 +40,38 @@ namespace Okay
 		void initialize(ID3D12Device* pDevice, CommandContext& commandContext);
 		void shutdown();
 
-		ResourceHandle addTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, void* pData);
+		AllocationHandle createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, void* pData);
 
-		ResourceHandle addConstantBuffer(BufferUsage usage, uint32_t byteSize, void* pData);
-		ResourceHandle addStructuredBuffer(BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData);
-		ResourceHandle addVertexBuffer(uint32_t vertexSize, uint32_t numVerticies, void* pData);
-		ResourceHandle addIndexBuffer(uint32_t numIndicies, void* pData);
+		ResourceHandle createResource(D3D12_HEAP_TYPE heapType, uint64_t size);
+		AllocationHandle addConstantBuffer(ResourceHandle resourceHandle, uint32_t byteSize, void* pData);
+		AllocationHandle addStructuredBuffer(ResourceHandle resourceHandle,uint32_t elementSize, uint32_t elementCount, void* pData);
 
-		void updateBuffer(ResourceHandle handle, void* pData);
+		void updateBuffer(AllocationHandle handle, void* pData);
 
-		ID3D12Resource* getDXResource(ResourceHandle handle);
-		D3D12_GPU_VIRTUAL_ADDRESS getVirtualAddress(ResourceHandle handle);
+		ID3D12Resource* getDXResource(AllocationHandle handle);
+		D3D12_GPU_VIRTUAL_ADDRESS getVirtualAddress(AllocationHandle handle);
 
-		const ResourceAllocation& getAllocation(ResourceHandle handle);
-		uint32_t getTotalSize(ResourceHandle handle);
+		const ResourceAllocation& getAllocation(AllocationHandle handle);
+		uint32_t getTotalSize(AllocationHandle handle);
 
-		DescriptorDesc createDescriptorDesc(ResourceHandle handle, DescriptorType type, bool nullDesc);
+		DescriptorDesc createDescriptorDesc(AllocationHandle handle, DescriptorType type, bool nullDesc);
 
 	private:
 		void createUploadResource(ID3D12Resource** ppResource, uint64_t byteSize);
 		void resizeUploadBuffer(uint64_t newSize);
 
-		ResourceHandle addBufferInternal(BufferUsage usage, uint32_t elementSize, uint32_t elementCount, void* pData);
-		
-		D3D12_HEAP_TYPE getHeapType(BufferUsage usage);
-		HeapStore& getHeapStore(BufferUsage usage);
-		std::vector<Resource>& getResourceList(BufferUsage usage);
+		AllocationHandle addBufferInternal(ResourceHandle handle, uint32_t elementSize, uint32_t elementCount, void* pData);
+	
+		void updateBufferInternal(const Resource& resource, const ResourceAllocation& allocation, void* pData);
+		void updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, void* pData);
+		void updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, void* pData);
+		void updateTexture(ID3D12Resource* pDXResource, unsigned char* pData);
 
-		void updateBufferInternal(const Resource& pResource, const ResourceAllocation& allocation, BufferUsage usage, void* pData);
-		void updateBufferUpload(ID3D12Resource* pResource, uint64_t resourceOffset, uint32_t byteSize, void* pData);
-		void updateBufferDirect(ID3D12Resource* pResource, uint64_t resourceOffset, uint32_t byteSize, void* pData);
-		void updateTexture(ID3D12Resource* pResource, unsigned char* pData);
+		AllocationHandle generateAllocationHandle(ResourceHandle resourceHandle, uint16_t allocationIndex);
+		void decodeAllocationHandle(AllocationHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation);
 
-		ResourceHandle generateHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage);
-		void decodeHandle(ResourceHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation, BufferUsage** ppOutUsage);
-		void validateDecodedHandle(uint16_t resourceIndex, uint16_t allocationIndex, BufferUsage usage);
+		void validateResourceHandle(ResourceHandle handle);
+		void validateAllocationHandle(AllocationHandle handle);
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
@@ -80,12 +81,9 @@ namespace Okay
 		uint64_t m_uploadHeapCurrentSize = INVALID_UINT64;
 		uint64_t m_uploadHeapMaxSize = INVALID_UINT64;
 
-		HeapStore m_staticHeapStore;
-		HeapStore m_dynamicHeapStore;
+		HeapStore m_heapStore;
 
-		std::vector<Resource> m_staticResources;
-		std::vector<Resource> m_dynamicResources;
-
+		std::vector<Resource> m_resources;
 		std::vector<ResourceAllocation> m_allocations;
 	};
 }

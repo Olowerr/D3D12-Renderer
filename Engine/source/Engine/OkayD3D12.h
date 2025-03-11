@@ -65,11 +65,4 @@ namespace Okay
 		OKAY_TEXTURE_FLAG_SHADER_READ = 2,
 		OKAY_TEXTURE_FLAG_DEPTH = 4,
 	};
-
-	enum BufferUsage : uint8_t
-	{
-		OKAY_BUFFER_USAGE_NONE = 0,
-		OKAY_BUFFER_USAGE_STATIC = 1,
-		OKAY_BUFFER_USAGE_DYNAMIC = 2,
-	};
 }
