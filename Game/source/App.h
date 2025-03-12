@@ -8,9 +8,10 @@ public:
 	App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight);
 	~App();
 
-	virtual void onUpdate(float dt) override;
+	virtual void onUpdate(Okay::TimeStep dt) override;
 
 private:
+	Okay::Entity m_camEntity;
 
 };
 

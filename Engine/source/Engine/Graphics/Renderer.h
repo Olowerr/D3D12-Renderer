@@ -49,7 +49,6 @@ namespace Okay
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
-		
 		IDXGISwapChain1* m_pSwapChain = nullptr;
 
 		ID3D12Resource* m_backBuffers[NUM_BACKBUFFERS] = {};
@@ -63,7 +62,6 @@ namespace Okay
 	private:
 		CommandContext m_commandContext;
 		GPUResourceManager m_gpuResourceManager;
-
 		DescriptorHeapStore m_descriptorHeapStore;
 
 		uint32_t m_cbvSrvUavDescriptorSize = INVALID_UINT32;
@@ -78,7 +76,7 @@ namespace Okay
 		ID3D12PipelineState* m_pPSO = nullptr;
 		AllocationHandle m_triangleColourAH = INVALID_AH;
 		AllocationHandle m_vertexBufferAH = INVALID_AH;
-		AllocationHandle m_indexBufferAH = INVALID_RH;
+		AllocationHandle m_indexBufferAH = INVALID_AH;
 		void createPSO();
 	};
 }

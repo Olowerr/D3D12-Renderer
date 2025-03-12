@@ -1,15 +1,14 @@
 #include "App.h"
 
+using namespace Okay;
+
 App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight)
-	:Okay::Application(windowName, windowWidth, windowHeight)
+	:Application(windowName, windowWidth, windowHeight)
 {
-	Okay::Entity camEntity = m_scene.createEntity();
-	camEntity.addComponent<Okay::Camera>();
+	m_camEntity = m_scene.createEntity();
+	m_camEntity.addComponent<Camera>();
 
-	m_scene.setActiveCamera(camEntity);
-
-	camEntity.getComponent<Okay::Transform>().position = glm::vec3(1.f, 0.f, -1.f);
-	camEntity.getComponent<Okay::Transform>().rotation = glm::vec3(0.f, -45.f, 0.f);
+	m_scene.setActiveCamera(m_camEntity);
 }
 
 App::~App()
@@ -17,6 +16,12 @@ App::~App()
 
 }
 
-void App::onUpdate(float dt)
+void App::onUpdate(TimeStep dt)
 {
+	Transform& camTransform = m_camEntity.getComponent<Transform>();
+
+	camTransform.rotation.x = 20.f;
+	camTransform.rotation.y += 45.f * dt;
+
+	camTransform.position = camTransform.forwardVec() * -2.f;
 }

@@ -3,6 +3,7 @@
 #include "Window.h"
 #include "Engine/Scene/Scene.h"
 #include "Engine/Graphics/Renderer.h"
+#include "Time.h"
 
 namespace Okay
 {
@@ -15,7 +16,7 @@ namespace Okay
 		void run();
 
 		// onStart, onEnd
-		virtual void onUpdate(float dt) = 0;
+		virtual void onUpdate(TimeStep dt) = 0;
 
 	protected:
 		Scene m_scene;

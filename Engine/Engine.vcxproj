@@ -19,6 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="source\Engine\Application\Time.h" />
     <ClInclude Include="source\Engine\Graphics\DescriptorHeapStore.h" />
     <ClInclude Include="source\Engine\Graphics\HeapStore.h" />
     <ClInclude Include="source\Engine\Graphics\CommandContext.h" />

@@ -21,11 +21,16 @@ namespace Okay
 
 	void Application::run()
 	{
+		Timer frameTimer;
+
 		while (m_window.isOpen())
 		{
+			TimeStep timeStep = frameTimer.measure();
+			frameTimer.reset();
+
 			m_window.processMessages();
 
-			onUpdate(0.f); // 0.f dt temporary
+			onUpdate(timeStep);
 
 			m_renderer.render(m_scene);
 		}
