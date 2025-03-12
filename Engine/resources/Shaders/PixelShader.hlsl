@@ -1,5 +1,5 @@
 
-cbuffer ColourCBuffer : register(b0, space0)
+cbuffer ColourCBuffer : register(b1, space0)
 {
 	float4 cbColour;
 }

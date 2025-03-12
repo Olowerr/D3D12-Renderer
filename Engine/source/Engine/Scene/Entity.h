@@ -28,14 +28,14 @@ namespace Okay
 		{
 			ASSERT_ENTITY();
 
-			return m_pRegistry->emplace_or_replace<T>(args...);
+			return m_pRegistry->emplace_or_replace<T>(m_enttID, args...);
 		}
 
 		template<typename T>
 		inline T& getComponent()
 		{
 			ASSERT_ENTITY();
-			OKAY_ASSERT(hasComponent<T>());
+			OKAY_ASSERT(hasComponents<T>());
 
 			return m_pRegistry->get<T>(m_enttID);
 		}
@@ -44,7 +44,7 @@ namespace Okay
 		inline const T& getComponent() const
 		{
 			ASSERT_ENTITY();
-			OKAY_ASSERT(hasComponent<T>());
+			OKAY_ASSERT(hasComponents<T>());
 
 			return m_pRegistry->get<T>(m_enttID);
 		}

@@ -2,10 +2,14 @@
 
 namespace Okay
 {
-	/* TODO:
-	* ? Merge all the "add...Buffer" functions in GPUResourceManager into addBuffer
-		* Takes in same parameters as current addStructuredBuffer()
-	*/
+	struct GPURenderData
+	{
+		glm::mat4 viewProjMatrix = glm::mat4(1.f);
+		glm::vec3 cameraPos = glm::vec3(0.f);
+		float pad0;
+		glm::vec3 cameraDir = glm::vec3(0.f);
+		float pad1;
+	};
 
 	void Renderer::initialize(const Window& window)
 	{
@@ -32,6 +36,9 @@ namespace Okay
 		m_dsvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
 		createPSO();
+
+		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, sizeof(GPURenderData));
+		m_renderDataAH = m_gpuResourceManager.addConstantBuffer(renderDataResource, 0, nullptr); // 0 byte size means the whole resource
 
 		struct Vertex
 		{
@@ -80,12 +87,28 @@ namespace Okay
 	
 	void Renderer::render(const Scene& scene)
 	{
-		glm::vec4 colour = glm::vec4(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, 1.f);
-		m_gpuResourceManager.updateBuffer(m_triangleColourAH, &colour);
+		updateBuffers(scene);
 
 		preRender();
 		renderScene(scene);
 		postRender();
+	}
+
+	void Renderer::updateBuffers(const Scene& scene)
+	{
+		const Entity camEntity = scene.getActiveCamera();
+		const Transform& camTransform = camEntity.getComponent<Transform>();
+		const Camera& cameraComp = camEntity.getComponent<Camera>();
+
+		GPURenderData renderData{};
+		renderData.cameraPos = camTransform.position;
+		renderData.cameraDir = camTransform.forwardVec();
+		renderData.viewProjMatrix = glm::transpose(cameraComp.getProjectionMatrix(m_viewport.Width, m_viewport.Height) * camTransform.getViewMatrix());
+
+		m_gpuResourceManager.updateBuffer(m_renderDataAH, &renderData);
+
+		glm::vec4 colour = glm::vec4(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, 1.f);
+		m_gpuResourceManager.updateBuffer(m_triangleColourAH, &colour);
 	}
 
 	void Renderer::preRender()
@@ -125,8 +148,9 @@ namespace Okay
 		pCommandList->SetGraphicsRootSignature(m_pRootSignature);
 		pCommandList->SetPipelineState(m_pPSO);
 
-		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_triangleColourAH));
-		pCommandList->SetGraphicsRootShaderResourceView(1, m_gpuResourceManager.getVirtualAddress(m_vertexBufferAH));
+		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderDataAH));
+		pCommandList->SetGraphicsRootConstantBufferView(1, m_gpuResourceManager.getVirtualAddress(m_triangleColourAH));
+		pCommandList->SetGraphicsRootShaderResourceView(2, m_gpuResourceManager.getVirtualAddress(m_vertexBufferAH));
 
 		pCommandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
 	}
@@ -273,17 +297,22 @@ namespace Okay
 
 	void Renderer::createPSO()
 	{
-		D3D12_ROOT_PARAMETER rootParams[2] = {};
+		D3D12_ROOT_PARAMETER rootParams[3] = {};
 
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 		rootParams[0].Descriptor.ShaderRegister = 0;
 		rootParams[0].Descriptor.RegisterSpace = 0;
-		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[1].Descriptor.ShaderRegister = 0;
+		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParams[1].Descriptor.ShaderRegister = 1;
 		rootParams[1].Descriptor.RegisterSpace = 0;
-		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		rootParams[2].Descriptor.ShaderRegister = 1;
+		rootParams[2].Descriptor.RegisterSpace = 0;
+		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
 		D3D12_ROOT_SIGNATURE_DESC rootDesc{};
 		rootDesc.NumParameters = _countof(rootParams);

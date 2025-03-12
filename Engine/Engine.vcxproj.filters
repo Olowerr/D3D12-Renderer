@@ -51,15 +51,15 @@
     <ClInclude Include="source\Engine\OkayD3D12.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\Engine\Scene\Components.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\Engine\Application\Window.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="source\Engine\Application\Application.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="source\Engine\Okay.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="source\Engine\Graphics\Renderer.cpp">

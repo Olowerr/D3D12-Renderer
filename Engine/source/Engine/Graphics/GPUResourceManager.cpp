@@ -76,7 +76,7 @@ namespace Okay
 		resource.maxSize = resourceAllocationInfo.SizeInBytes;
 
 		ResourceAllocation& allocation = m_allocations.emplace_back();
-		allocation.elementSize = resource.usedSize;
+		allocation.elementSize = (uint32_t)resource.usedSize;
 		allocation.numElements = 1;
 		allocation.resourceOffset = 0;
 
@@ -107,7 +107,11 @@ namespace Okay
 
 	AllocationHandle GPUResourceManager::addConstantBuffer(ResourceHandle resourceHandle, uint32_t byteSize, void* pData)
 	{
-		OKAY_ASSERT(byteSize);
+		if (byteSize == 0)
+		{
+			validateResourceHandle(resourceHandle);
+			byteSize = (uint32_t)m_resources[resourceHandle].maxSize;
+		}
 
 		return addBufferInternal(resourceHandle, byteSize, 1, pData);
 	}
@@ -353,11 +357,7 @@ namespace Okay
 
 	void GPUResourceManager::validateResourceHandle(ResourceHandle handle)
 	{
-		uint16_t* pHandle = (uint16_t*)&handle;
-
-		uint16_t resourceIndex = pHandle[HANDLE_RESOURCE_IDX_SLOT];
-
-		OKAY_ASSERT(resourceIndex < (uint16_t)m_resources.size());
+		OKAY_ASSERT(handle < (uint16_t)m_resources.size());
 	}
 
 	void GPUResourceManager::validateAllocationHandle(AllocationHandle handle)

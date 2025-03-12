@@ -30,7 +30,7 @@ namespace Okay
 		void render(const Scene& scene);
 
 	private:
-
+		void updateBuffers(const Scene& scene);
 		void preRender();
 		void renderScene(const Scene& scene);
 		void postRender();
@@ -69,6 +69,9 @@ namespace Okay
 		uint32_t m_cbvSrvUavDescriptorSize = INVALID_UINT32;
 		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
 		uint32_t m_dsvDescriptorSize = INVALID_UINT32;
+
+	private:
+		AllocationHandle m_renderDataAH;
 
 	private: // temp
 		ID3D12RootSignature* m_pRootSignature = nullptr;
