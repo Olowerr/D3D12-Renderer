@@ -2,9 +2,9 @@
 
 #include "Engine/Okay.h"
 
+#include <windows.h>
 #include "GLFW/glfw3.h"
 
-#include <Windows.h>
 #include <string_view>
 
 namespace Okay

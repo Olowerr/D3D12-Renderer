@@ -2,6 +2,8 @@
 
 #include "Engine/OkayD3D12.h"
 
+#include <vector>
+
 namespace Okay
 {
 	typedef uint32_t DescriptorHandle;

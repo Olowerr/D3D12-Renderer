@@ -8,7 +8,7 @@ namespace Okay
 {
 	struct MeshData
 	{
-		std::vector<Vertex> verticies;
+		//std::vector<Vertex> verticies;
 		std::vector<uint32_t> indicies;
 	};
 

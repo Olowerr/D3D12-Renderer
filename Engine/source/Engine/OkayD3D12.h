@@ -3,8 +3,8 @@
 #include "Okay.h"
 
 #include <d3d12.h>
-#include <cassert>
-#include <inttypes.h>
+#include <dxgidebug.h>
+#include <d3dcompiler.h>
 
 // Always defined to check condition
 #define OKAY_ASSERT2(condition)																	\

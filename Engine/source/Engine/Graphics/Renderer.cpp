@@ -1,9 +1,5 @@
 #include "Renderer.h"
 
-#include <dxgidebug.h>
-#include <d3dcompiler.h>
-#include <stdlib.h>
-
 namespace Okay
 {
 	/* TODO:
