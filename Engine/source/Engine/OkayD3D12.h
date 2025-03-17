@@ -3,10 +3,14 @@
 #include "Okay.h"
 
 #include <d3d12.h>
+#include <dxgi1_2.h>
 #include <dxgidebug.h>
 #include <d3dcompiler.h>
+#include <dxgi.h>
 
-// Always defined to check condition
+#include <filesystem>
+
+// Always defined to check condition, TODO: Rename marco to like "OKAY_ALWAYS_ASSERT", or even better move this define to Okay.h and make OKAY_ASSERT use it
 #define OKAY_ASSERT2(condition)																	\
 	{																							\
 		if (!(condition))																		\
@@ -47,7 +51,7 @@ namespace Okay
 		DescriptorType type = OKAY_DESCRIPTOR_TYPE_NONE;
 		union
 		{
-			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc;
+			D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
 			D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc;
 			D3D12_RENDER_TARGET_VIEW_DESC rtvDesc;
@@ -65,4 +69,162 @@ namespace Okay
 		OKAY_TEXTURE_FLAG_SHADER_READ = 2,
 		OKAY_TEXTURE_FLAG_DEPTH = 4,
 	};
+
+	inline void logAdapterInfo(IDXGIAdapter* pAdapter)
+	{
+		DXGI_ADAPTER_DESC adapterDesc{};
+		pAdapter->GetDesc(&adapterDesc);
+
+		printf("-- GPU INFO --\n");
+		printf("Name: %ws\n", adapterDesc.Description);
+		printf("Dedicated Video Memory: %.2f GB\n", adapterDesc.DedicatedVideoMemory / 1'000'000'000.f);
+		printf("Dedicated System Memory: %.2f GB\n", adapterDesc.DedicatedSystemMemory / 1'000'000'000.f);
+		printf("Shared System Memory: %.2f GB\n\n", adapterDesc.SharedSystemMemory / 1'000'000'000.f);
+	}
+
+	inline D3D12_SHADER_BYTECODE compileShader(std::filesystem::path path, std::string_view version, ID3DBlob** pShaderBlob)
+	{
+		ID3DBlob* pErrorBlob = nullptr;
+
+#ifdef _DEBUG
+		uint32_t flags1 = D3DCOMPILE_DEBUG;
+#else
+		uint32_t flags1 = D3DCOMPILE_OPTIMIZATION_LEVEL2;;
+#endif
+
+		HRESULT hr = D3DCompileFromFile(path.c_str(), nullptr, nullptr, "main", version.data(), flags1, 0, pShaderBlob, &pErrorBlob);
+		if (FAILED(hr))
+		{
+			const char* pErrorMsg = pErrorBlob ? (const char*)pErrorBlob->GetBufferPointer() : "No errors produced, file might have been found.";
+
+			printf("Shader Compilation failed\n    Path: %ls\n    Error: %s\n", path.c_str(), pErrorMsg);
+			OKAY_ASSERT(false);
+		}
+
+		D3D12_RELEASE(pErrorBlob);
+
+		D3D12_SHADER_BYTECODE shaderByteCode{};
+		shaderByteCode.pShaderBytecode = (*pShaderBlob)->GetBufferPointer();
+		shaderByteCode.BytecodeLength = (*pShaderBlob)->GetBufferSize();
+
+		return shaderByteCode;
+	}
+
+	constexpr D3D12_BLEND_DESC createDefaultBlendDesc()
+	{
+		D3D12_BLEND_DESC desc = {};
+		desc.AlphaToCoverageEnable = false;
+		desc.IndependentBlendEnable = false;
+
+		D3D12_RENDER_TARGET_BLEND_DESC rtvBlendDesc = {};
+		rtvBlendDesc.BlendEnable = false;
+		rtvBlendDesc.LogicOpEnable = false;
+		rtvBlendDesc.SrcBlend = D3D12_BLEND_ONE;
+		rtvBlendDesc.DestBlend = D3D12_BLEND_ZERO;
+		rtvBlendDesc.BlendOp = D3D12_BLEND_OP_ADD;
+		rtvBlendDesc.SrcBlendAlpha = D3D12_BLEND_ONE;
+		rtvBlendDesc.DestBlendAlpha = D3D12_BLEND_ZERO;
+		rtvBlendDesc.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		rtvBlendDesc.LogicOp = D3D12_LOGIC_OP_NOOP;
+		rtvBlendDesc.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+		desc.RenderTarget[0] = rtvBlendDesc;
+		desc.RenderTarget[1] = rtvBlendDesc;
+		desc.RenderTarget[2] = rtvBlendDesc;
+		desc.RenderTarget[3] = rtvBlendDesc;
+		desc.RenderTarget[4] = rtvBlendDesc;
+		desc.RenderTarget[5] = rtvBlendDesc;
+		desc.RenderTarget[6] = rtvBlendDesc;
+		desc.RenderTarget[7] = rtvBlendDesc;
+
+		return desc;
+	}
+
+	constexpr D3D12_RASTERIZER_DESC createDefaultRasterizerDesc()
+	{
+		D3D12_RASTERIZER_DESC desc = {};
+		desc.FillMode = D3D12_FILL_MODE_SOLID;
+		desc.CullMode = D3D12_CULL_MODE_BACK;
+		desc.FrontCounterClockwise = false;
+		desc.DepthBias = 0;
+		desc.DepthBiasClamp = 0.0f;
+		desc.SlopeScaledDepthBias = 0.0f;
+		desc.DepthClipEnable = true;
+		desc.MultisampleEnable = false;
+		desc.AntialiasedLineEnable = false;
+		desc.ForcedSampleCount = 0;
+		desc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+		return desc;
+	}
+
+	constexpr D3D12_DEPTH_STENCIL_DESC createDefaultDepthStencilDesc()
+	{
+		D3D12_DEPTH_STENCIL_DESC desc = {};
+		desc.DepthEnable = true;
+		desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+		desc.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+
+		desc.StencilEnable = false;
+		desc.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+		desc.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+
+		desc.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+		desc.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+		desc.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+		desc.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+
+		desc.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+		desc.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+		desc.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+		desc.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+
+		return desc;
+	}
+
+	constexpr D3D12_GRAPHICS_PIPELINE_STATE_DESC createDefaultGraphicsPipelineStateDesc()
+	{
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC desc = {};
+		desc.StreamOutput.pSODeclaration = nullptr;
+		desc.StreamOutput.NumEntries = 0;
+		desc.StreamOutput.pBufferStrides = nullptr;
+		desc.StreamOutput.NumStrides = 0;
+		desc.StreamOutput.RasterizedStream = 0;
+
+		desc.BlendState = createDefaultBlendDesc();
+		desc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
+		desc.RasterizerState = createDefaultRasterizerDesc();
+		desc.DepthStencilState = createDefaultDepthStencilDesc();
+
+		desc.InputLayout.pInputElementDescs = nullptr;
+		desc.InputLayout.NumElements = 0;
+		desc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
+
+		desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+		desc.NumRenderTargets = 0;
+		desc.RTVFormats[0] = DXGI_FORMAT_UNKNOWN;
+		desc.RTVFormats[1] = DXGI_FORMAT_UNKNOWN;
+		desc.RTVFormats[2] = DXGI_FORMAT_UNKNOWN;
+		desc.RTVFormats[3] = DXGI_FORMAT_UNKNOWN;
+		desc.RTVFormats[4] = DXGI_FORMAT_UNKNOWN;
+		desc.RTVFormats[5] = DXGI_FORMAT_UNKNOWN;
+		desc.RTVFormats[6] = DXGI_FORMAT_UNKNOWN;
+		desc.RTVFormats[7] = DXGI_FORMAT_UNKNOWN;
+
+		desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+
+		desc.SampleDesc.Count = 1;
+		desc.SampleDesc.Quality = 0;
+
+		desc.NodeMask = 0;
+
+		desc.CachedPSO.CachedBlobSizeInBytes = 0;
+		desc.CachedPSO.pCachedBlob = nullptr;
+
+		desc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		return desc;
+	}
+
 }

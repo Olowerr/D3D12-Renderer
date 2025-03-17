@@ -7,6 +7,7 @@
 namespace Okay
 {
 	typedef uint32_t DescriptorHandle;
+	constexpr DescriptorHandle INVALID_DH = INVALID_UINT32;
 
 	struct DescriptorHeap
 	{
@@ -27,6 +28,7 @@ namespace Okay
 		void initialize(ID3D12Device* pDevice, uint16_t numSlots);
 		void shutdown();
 
+		// TODO: Rename to like 'createConsecutiveDescripotrs' & add function 'createDescriptor' to create single descriptor
 		DescriptorHandle createDescriptors(uint32_t numDescriptors, const DescriptorDesc* pDescs, D3D12_DESCRIPTOR_HEAP_TYPE type);
 
 		D3D12_CPU_DESCRIPTOR_HANDLE getCPUHandle(DescriptorHandle handle);

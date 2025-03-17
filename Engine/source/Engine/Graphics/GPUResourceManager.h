@@ -11,8 +11,8 @@ namespace Okay
 	typedef uint32_t AllocationHandle;
 	typedef uint16_t ResourceHandle;
 
-	constexpr uint32_t INVALID_AH = INVALID_UINT32;
-	constexpr uint16_t INVALID_RH = INVALID_UINT16;
+	constexpr AllocationHandle INVALID_AH = INVALID_UINT32;
+	constexpr ResourceHandle INVALID_RH = INVALID_UINT16;
 
 	struct ResourceAllocation
 	{

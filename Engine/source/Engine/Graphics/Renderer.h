@@ -2,14 +2,7 @@
 
 #include "Engine/Application/Window.h"
 #include "Engine/Scene/Scene.h"
-#include "GPUResourceManager.h"
-#include "CommandContext.h"
-#include "DescriptorHeapStore.h"
-
-#include <dxgi.h>
-#include <dxgi1_2.h>
-
-#include <filesystem>
+#include "RenderPass.h"
 
 namespace Okay
 {
@@ -44,10 +37,6 @@ namespace Okay
 		void fetchBackBuffersAndDSV();
 
 	private:
-		static void logAdapterInfo(IDXGIAdapter* pAdapter);
-		static D3D12_SHADER_BYTECODE compileShader(std::filesystem::path path, std::string_view version, ID3DBlob** pShaderBlob);
-
-	private:
 		ID3D12Device* m_pDevice = nullptr;
 		IDXGISwapChain1* m_pSwapChain = nullptr;
 
@@ -72,11 +61,10 @@ namespace Okay
 		AllocationHandle m_renderDataAH;
 
 	private: // temp
-		ID3D12RootSignature* m_pRootSignature = nullptr;
-		ID3D12PipelineState* m_pPSO = nullptr;
+		RenderPass m_mainRenderPass;
 		AllocationHandle m_triangleColourAH = INVALID_AH;
 		AllocationHandle m_vertexBufferAH = INVALID_AH;
 		AllocationHandle m_indexBufferAH = INVALID_AH;
-		void createPSO();
+		void createMainRenderPass();
 	};
 }

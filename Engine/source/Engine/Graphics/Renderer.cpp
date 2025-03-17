@@ -35,7 +35,7 @@ namespace Okay
 		m_rtvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 		m_dsvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
-		createPSO();
+		createMainRenderPass();
 
 		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, sizeof(GPURenderData));
 		m_renderDataAH = m_gpuResourceManager.addConstantBuffer(renderDataResource, 0, nullptr); // 0 byte size means the whole resource
@@ -75,14 +75,13 @@ namespace Okay
 
 		m_descriptorHeapStore.shutdown();
 
+		m_mainRenderPass.shutdown();
+
 		for (uint32_t i = 0; i < NUM_BACKBUFFERS; i++)
 			D3D12_RELEASE(m_backBuffers[i]);
 
 		D3D12_RELEASE(m_pSwapChain);
 		D3D12_RELEASE(m_pDevice);
-
-		D3D12_RELEASE(m_pRootSignature);
-		D3D12_RELEASE(m_pPSO);
 	}
 	
 	void Renderer::render(const Scene& scene)
@@ -142,11 +141,9 @@ namespace Okay
 
 	void Renderer::renderScene(const Scene& scene)
 	{
-		// temp
 		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
 		
-		pCommandList->SetGraphicsRootSignature(m_pRootSignature);
-		pCommandList->SetPipelineState(m_pPSO);
+		m_mainRenderPass.bind(pCommandList);
 
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderDataAH));
 		pCommandList->SetGraphicsRootConstantBufferView(1, m_gpuResourceManager.getVirtualAddress(m_triangleColourAH));
@@ -186,7 +183,7 @@ namespace Okay
 
 		D3D12CreateDevice(pAdapter, D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&m_pDevice));
 
-		Renderer::logAdapterInfo(pAdapter);
+		logAdapterInfo(pAdapter);
 
 		D3D12_RELEASE(pAdapter);
 	}
@@ -255,47 +252,7 @@ namespace Okay
 		m_scissorRect.bottom = (LONG)backBufferDesc.Height;
 	}
 
-	void Renderer::logAdapterInfo(IDXGIAdapter* pAdapter)
-	{
-		DXGI_ADAPTER_DESC adapterDesc{};
-		pAdapter->GetDesc(&adapterDesc);
-
-		printf("-- GPU INFO --\n");
-		printf("Name: %ws\n", adapterDesc.Description);
-		printf("Dedicated Video Memory: %.2f GB\n", adapterDesc.DedicatedVideoMemory / 1'000'000'000.f);
-		printf("Dedicated System Memory: %.2f GB\n", adapterDesc.DedicatedSystemMemory / 1'000'000'000.f);
-		printf("Shared System Memory: %.2f GB\n\n", adapterDesc.SharedSystemMemory / 1'000'000'000.f);
-	}
-
-	D3D12_SHADER_BYTECODE Renderer::compileShader(std::filesystem::path path, std::string_view version, ID3DBlob** pShaderBlob)
-	{
-		ID3DBlob* pErrorBlob = nullptr;
-
-#ifdef _DEBUG
-		uint32_t flags1 = D3DCOMPILE_DEBUG;
-#else
-		uint32_t flags1 = D3DCOMPILE_OPTIMIZATION_LEVEL2;;
-#endif
-
-		HRESULT hr = D3DCompileFromFile(path.c_str(), nullptr, nullptr, "main", version.data(), flags1, 0, pShaderBlob, &pErrorBlob);
-		if (FAILED(hr))
-		{
-			const char* pErrorMsg = pErrorBlob ? (const char*)pErrorBlob->GetBufferPointer() : "No errors produced, file might have been found.";
-
-			printf("Shader Compilation failed\n    Path: %ls\n    Error: %s\n", path.c_str(), pErrorMsg);
-			OKAY_ASSERT(false);
-		}
-
-		D3D12_RELEASE(pErrorBlob);
-
-		D3D12_SHADER_BYTECODE shaderByteCode{};
-		shaderByteCode.pShaderBytecode = (*pShaderBlob)->GetBufferPointer();
-		shaderByteCode.BytecodeLength = (*pShaderBlob)->GetBufferSize();
-
-		return shaderByteCode;
-	}
-
-	void Renderer::createPSO()
+	void Renderer::createMainRenderPass()
 	{
 		D3D12_ROOT_PARAMETER rootParams[3] = {};
 
@@ -314,108 +271,30 @@ namespace Okay
 		rootParams[2].Descriptor.RegisterSpace = 0;
 		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
-		D3D12_ROOT_SIGNATURE_DESC rootDesc{};
-		rootDesc.NumParameters = _countof(rootParams);
-		rootDesc.pParameters = rootParams;
-		rootDesc.NumStaticSamplers = 0;
-		rootDesc.pStaticSamplers = nullptr;
-		rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
+		rootSignatureDesc.NumParameters = _countof(rootParams);
+		rootSignatureDesc.pParameters = rootParams;
 
-		ID3DBlob* pRootBlob = nullptr;
-		ID3DBlob* pErrorBlob = nullptr;
+		rootSignatureDesc.NumStaticSamplers = 0;
+		rootSignatureDesc.pStaticSamplers = nullptr;
 
-		HRESULT hr = D3D12SerializeRootSignature(&rootDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, &pRootBlob, &pErrorBlob);
-		if (FAILED(hr))
-		{
-			printf("Failed to serialize root signature: %s\n", (char*)pErrorBlob->GetBufferPointer());
-			OKAY_ASSERT(false);
-		}
 
-		DX_CHECK(m_pDevice->CreateRootSignature(0, pRootBlob->GetBufferPointer(), pRootBlob->GetBufferSize(), IID_PPV_ARGS(&m_pRootSignature)));
-
-		ID3DBlob* pVsShaderBlob = nullptr;
-		ID3DBlob* pPsShaderBlob = nullptr;
-
-		D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc{};
-		pipelineDesc.pRootSignature = m_pRootSignature;
-
-		pipelineDesc.VS = Renderer::compileShader(SHADER_PATH / "VertexShader.hlsl", "vs_5_1", &pVsShaderBlob);
-		pipelineDesc.PS = Renderer::compileShader(SHADER_PATH / "PixelShader.hlsl", "ps_5_1", &pPsShaderBlob);
-
-		pipelineDesc.StreamOutput.pSODeclaration = nullptr;
-		pipelineDesc.StreamOutput.NumEntries = 0;
-		pipelineDesc.StreamOutput.pBufferStrides = nullptr;
-		pipelineDesc.StreamOutput.NumStrides = 0;
-		pipelineDesc.StreamOutput.RasterizedStream = 0;
-
-		pipelineDesc.BlendState.AlphaToCoverageEnable = false;
-		pipelineDesc.BlendState.IndependentBlendEnable = false;
-		pipelineDesc.NumRenderTargets = 1;
-
-		pipelineDesc.BlendState.RenderTarget[0].BlendEnable = false;
-		pipelineDesc.BlendState.RenderTarget[0].LogicOpEnable = false;
-		pipelineDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
-		pipelineDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
-		pipelineDesc.BlendState.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-		pipelineDesc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-		pipelineDesc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
-		pipelineDesc.BlendState.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-		pipelineDesc.BlendState.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_NOOP;
-		pipelineDesc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-
-		pipelineDesc.SampleMask = D3D12_DEFAULT_SAMPLE_MASK;
-
-		pipelineDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-		pipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-		pipelineDesc.RasterizerState.FrontCounterClockwise = false;
-		pipelineDesc.RasterizerState.DepthBias = 0;
-		pipelineDesc.RasterizerState.DepthBiasClamp = 0.0f;
-		pipelineDesc.RasterizerState.SlopeScaledDepthBias = 0.0f;
-		pipelineDesc.RasterizerState.DepthClipEnable = true;
-		pipelineDesc.RasterizerState.MultisampleEnable = false;
-		pipelineDesc.RasterizerState.AntialiasedLineEnable = false;
-		pipelineDesc.RasterizerState.ForcedSampleCount = 0;
-		pipelineDesc.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-
-		pipelineDesc.DepthStencilState.DepthEnable = true;
-		pipelineDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-		pipelineDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
-		pipelineDesc.DepthStencilState.StencilEnable = false;
-		pipelineDesc.DepthStencilState.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
-		pipelineDesc.DepthStencilState.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
-		pipelineDesc.DepthStencilState.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-		pipelineDesc.DepthStencilState.BackFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
-		pipelineDesc.DepthStencilState.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-		pipelineDesc.DepthStencilState.BackFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
-		pipelineDesc.DepthStencilState.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-		pipelineDesc.DepthStencilState.BackFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
-		pipelineDesc.DepthStencilState.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-		pipelineDesc.DepthStencilState.BackFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-
-		pipelineDesc.InputLayout.pInputElementDescs = nullptr;
-		pipelineDesc.InputLayout.NumElements = 0;
-		pipelineDesc.IBStripCutValue = D3D12_INDEX_BUFFER_STRIP_CUT_VALUE_DISABLED;
-
-		pipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = createDefaultGraphicsPipelineStateDesc();
 		pipelineDesc.NumRenderTargets = 1;
 		pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
 		pipelineDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
-		pipelineDesc.SampleDesc.Count = 1;
-		pipelineDesc.SampleDesc.Quality = 0;
+		ID3DBlob* pVSBlob = nullptr;
+		ID3DBlob* pPSBlob = nullptr;
 
-		pipelineDesc.NodeMask = 0;
-		
-		pipelineDesc.CachedPSO.CachedBlobSizeInBytes = 0;
-		pipelineDesc.CachedPSO.pCachedBlob = nullptr;
+		pipelineDesc.VS = compileShader(SHADER_PATH / "VertexShader.hlsl", "vs_5_1", &pVSBlob);
+		pipelineDesc.PS = compileShader(SHADER_PATH / "PixelShader.hlsl", "ps_5_1", &pPSBlob);
 
-		pipelineDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
-		DX_CHECK(m_pDevice->CreateGraphicsPipelineState(&pipelineDesc, IID_PPV_ARGS(&m_pPSO)));
+		m_mainRenderPass.initialize(m_pDevice, pipelineDesc, rootSignatureDesc);
 
-		D3D12_RELEASE(pVsShaderBlob);
-		D3D12_RELEASE(pPsShaderBlob);
+		D3D12_RELEASE(pVSBlob);
+		D3D12_RELEASE(pPSBlob);
 	}
 
 	void Renderer::enableDebugLayer()
