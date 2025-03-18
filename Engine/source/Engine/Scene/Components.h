@@ -42,4 +42,9 @@ namespace Okay
 			return glm::perspectiveFovLH_ZO(fov, width, height, nearZ, farZ);
 		}
 	};
+
+	struct MeshRenderer
+	{
+		uint32_t meshID = INVALID_UINT32;
+	};
 }

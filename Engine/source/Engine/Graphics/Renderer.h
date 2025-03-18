@@ -58,7 +58,8 @@ namespace Okay
 		uint32_t m_dsvDescriptorSize = INVALID_UINT32;
 
 	private:
-		AllocationHandle m_renderDataAH;
+		AllocationHandle m_renderDataAH = INVALID_AH;
+		AllocationHandle m_instancedObjectDataAH = INVALID_AH;
 
 	private: // temp
 		RenderPass m_mainRenderPass;

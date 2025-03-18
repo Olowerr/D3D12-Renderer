@@ -11,6 +11,11 @@ namespace Okay
 		float pad1;
 	};
 
+	struct GPUObjectData
+	{
+		glm::mat4 objectMatrix = glm::mat4(1.f);
+	};
+
 	void Renderer::initialize(const Window& window)
 	{
 #ifndef NDEBUG
@@ -37,8 +42,10 @@ namespace Okay
 
 		createMainRenderPass();
 
-		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, sizeof(GPURenderData));
-		m_renderDataAH = m_gpuResourceManager.addConstantBuffer(renderDataResource, 0, nullptr); // 0 byte size means the whole resource
+		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, RESOURCE_PLACEMENT_ALIGNMENT);
+
+		m_renderDataAH = m_gpuResourceManager.addConstantBuffer(renderDataResource, sizeof(GPURenderData), nullptr);
+		m_instancedObjectDataAH = m_gpuResourceManager.addStructuredBuffer(renderDataResource, sizeof(GPUObjectData), 10, nullptr);
 
 		struct Vertex
 		{
@@ -46,14 +53,14 @@ namespace Okay
 			glm::vec4 colour;
 		};
 
-		Vertex verticies[] = 
+		Vertex verticies[] =
 		{
-			{ .position = glm::vec3(-0.5f, -0.5f, 0.f), .colour = glm::vec4(1.f, 0.f, 0.f, 1.f) },
-			{ .position = glm::vec3(0.5f, -0.5f, 0.0f), .colour = glm::vec4(0.f, 0.f, 1.f, 1.f) },
-			{ .position = glm::vec3(0.f, 0.5f, 0.f), .colour = glm::vec4(0.f, 1.f, 0.f, 1.f) },
+			{.position = glm::vec3(-0.5f, -0.5f, 0.f), .colour = glm::vec4(1.f, 0.f, 0.f, 1.f) },
+			{.position = glm::vec3(0.5f, -0.5f, 0.0f), .colour = glm::vec4(0.f, 0.f, 1.f, 1.f) },
+			{.position = glm::vec3(0.f, 0.5f, 0.f), .colour = glm::vec4(0.f, 1.f, 0.f, 1.f) },
 		};
 
-		uint32_t indicies[] = 
+		uint32_t indicies[] =
 		{
 			0, 2, 1
 		};
@@ -67,7 +74,7 @@ namespace Okay
 		m_indexBufferAH = m_gpuResourceManager.addStructuredBuffer(indexBufferRH, sizeof(indicies[0]), _countof(indicies), &indicies);
 		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(indexBufferRH), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	}
-	
+
 	void Renderer::shutdown()
 	{
 		m_commandContext.shutdown();
@@ -83,7 +90,7 @@ namespace Okay
 		D3D12_RELEASE(m_pSwapChain);
 		D3D12_RELEASE(m_pDevice);
 	}
-	
+
 	void Renderer::render(const Scene& scene)
 	{
 		updateBuffers(scene);
@@ -125,12 +132,6 @@ namespace Okay
 		pCommandList->ClearRenderTargetView(rtvCPUDescriptorHandle, testClearColor, 0, nullptr);
 		pCommandList->ClearDepthStencilView(dsvCPUDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
-		D3D12_INDEX_BUFFER_VIEW ibView = {};
-		ibView.BufferLocation = m_gpuResourceManager.getVirtualAddress(m_indexBufferAH);
-		ibView.SizeInBytes = m_gpuResourceManager.getTotalSize(m_indexBufferAH);
-		ibView.Format = DXGI_FORMAT_R32_UINT;
-
-		pCommandList->IASetIndexBuffer(&ibView);
 		pCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 		pCommandList->RSSetViewports(1, &m_viewport);
@@ -142,14 +143,41 @@ namespace Okay
 	void Renderer::renderScene(const Scene& scene)
 	{
 		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
-		
+
 		m_mainRenderPass.bind(pCommandList);
 
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderDataAH));
-		pCommandList->SetGraphicsRootConstantBufferView(1, m_gpuResourceManager.getVirtualAddress(m_triangleColourAH));
-		pCommandList->SetGraphicsRootShaderResourceView(2, m_gpuResourceManager.getVirtualAddress(m_vertexBufferAH));
+		pCommandList->SetGraphicsRootShaderResourceView(1, m_gpuResourceManager.getVirtualAddress(m_instancedObjectDataAH));
+		pCommandList->SetGraphicsRootConstantBufferView(2, m_gpuResourceManager.getVirtualAddress(m_triangleColourAH));
+		pCommandList->SetGraphicsRootShaderResourceView(3, m_gpuResourceManager.getVirtualAddress(m_vertexBufferAH));
 
-		pCommandList->DrawIndexedInstanced(3, 1, 0, 0, 0);
+		D3D12_INDEX_BUFFER_VIEW ibView = {};
+		ibView.BufferLocation = m_gpuResourceManager.getVirtualAddress(m_indexBufferAH);
+		ibView.SizeInBytes = m_gpuResourceManager.getTotalSize(m_indexBufferAH);
+		ibView.Format = DXGI_FORMAT_R32_UINT;
+
+		pCommandList->IASetIndexBuffer(&ibView);
+
+		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
+		uint32_t numMeshRenders = (uint32_t)meshRendererView.size_hint();
+
+		// Temp
+		OKAY_ASSERT(numMeshRenders <= m_gpuResourceManager.getAllocation(m_instancedObjectDataAH).numElements);
+
+		static std::vector<GPUObjectData> objectDatas;
+		objectDatas.reserve(numMeshRenders);
+		objectDatas.clear();
+
+		for (entt::entity entity : meshRendererView)
+		{
+			auto [meshRenderer, transform] = meshRendererView[entity];
+
+			GPUObjectData& objectData = objectDatas.emplace_back();
+			objectData.objectMatrix = glm::transpose(transform.getMatrix());
+		}
+
+		m_gpuResourceManager.updateBuffer(m_instancedObjectDataAH, objectDatas.data());
+		pCommandList->DrawIndexedInstanced(3, numMeshRenders, 0, 0, 0);
 	}
 
 	void Renderer::postRender()
@@ -254,22 +282,27 @@ namespace Okay
 
 	void Renderer::createMainRenderPass()
 	{
-		D3D12_ROOT_PARAMETER rootParams[3] = {};
+		D3D12_ROOT_PARAMETER rootParams[4] = {};
 
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 		rootParams[0].Descriptor.ShaderRegister = 0;
 		rootParams[0].Descriptor.RegisterSpace = 0;
 		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
 		rootParams[1].Descriptor.ShaderRegister = 1;
 		rootParams[1].Descriptor.RegisterSpace = 0;
-		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-		rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[2].Descriptor.ShaderRegister = 1;
+		rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParams[2].Descriptor.ShaderRegister = 2;
 		rootParams[2].Descriptor.RegisterSpace = 0;
-		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		rootParams[3].Descriptor.ShaderRegister = 3;
+		rootParams[3].Descriptor.RegisterSpace = 0;
+		rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
 		rootSignatureDesc.NumParameters = _countof(rootParams);
