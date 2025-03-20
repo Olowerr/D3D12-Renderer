@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Engine/Okay.h"
+
 #ifndef GLM_ENABLE_EXPERIMENTAL
 #define GLM_ENABLE_EXPERIMENTAL
 #endif
@@ -45,6 +47,6 @@ namespace Okay
 
 	struct MeshRenderer
 	{
-		uint32_t meshID = INVALID_UINT32;
+		AssetID meshID = INVALID_UINT32;
 	};
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "glm/glm.hpp"
+
 #include <inttypes.h>
 #include <cassert>
 #include <cstdio>
@@ -16,7 +18,18 @@
 
 namespace Okay
 {
+	typedef uint32_t AssetID;
+
 	constexpr uint16_t INVALID_UINT16 = UINT16_MAX;
 	constexpr uint32_t INVALID_UINT32 = UINT32_MAX;
 	constexpr uint64_t INVALID_UINT64 = UINT64_MAX;
+
+
+
+	struct Vertex
+	{
+		glm::vec3 position = glm::vec3(0.f);
+		glm::vec3 normal = glm::vec3(0.f);
+		glm::vec2 uv = glm::vec2(0.f);
+	};
 }

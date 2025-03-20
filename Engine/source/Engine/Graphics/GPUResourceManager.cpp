@@ -35,7 +35,7 @@ namespace Okay
 		m_pDevice = nullptr;
 	}
 
-	AllocationHandle GPUResourceManager::createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, void* pData)
+	AllocationHandle GPUResourceManager::createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, const void* pData)
 	{
 		OKAY_ASSERT(width);
 		OKAY_ASSERT(height);
@@ -105,7 +105,7 @@ namespace Okay
 		return handle;
 	}
 
-	AllocationHandle GPUResourceManager::addConstantBuffer(ResourceHandle resourceHandle, uint32_t byteSize, void* pData)
+	AllocationHandle GPUResourceManager::addConstantBuffer(ResourceHandle resourceHandle, uint32_t byteSize, const void* pData)
 	{
 		if (byteSize == 0)
 		{
@@ -116,7 +116,7 @@ namespace Okay
 		return addBufferInternal(resourceHandle, byteSize, 1, pData);
 	}
 
-	AllocationHandle GPUResourceManager::addStructuredBuffer(ResourceHandle resourceHandle, uint32_t elementSize, uint32_t elementCount, void* pData)
+	AllocationHandle GPUResourceManager::addStructuredBuffer(ResourceHandle resourceHandle, uint32_t elementSize, uint32_t elementCount, const void* pData)
 	{
 		OKAY_ASSERT(elementSize);
 		OKAY_ASSERT(elementCount);
@@ -124,7 +124,7 @@ namespace Okay
 		return addBufferInternal(resourceHandle, elementSize, elementCount, pData);
 	}
 
-	void GPUResourceManager::updateBuffer(AllocationHandle handle, void* pData)
+	void GPUResourceManager::updateBuffer(AllocationHandle handle, const void* pData)
 	{
 		Resource* pResource = nullptr;
 		ResourceAllocation* pAllocation = nullptr;
@@ -150,6 +150,27 @@ namespace Okay
 		decodeAllocationHandle(handle, &pResource, &pAllocation);
 
 		return pResource->pDXResource->GetGPUVirtualAddress() + pAllocation->resourceOffset;
+	}
+
+	void* GPUResourceManager::mapResource(ResourceHandle handle)
+	{
+		Resource* pResource = nullptr;
+		decodeAllocationHandle(handle, &pResource, nullptr);
+
+		D3D12_RANGE readRange = { 0, 0 };
+
+		void* pMappedData = nullptr;
+		DX_CHECK(pResource->pDXResource->Map(0, &readRange, &pMappedData));
+
+		return pMappedData;
+	}
+
+	void GPUResourceManager::unmapResource(ResourceHandle handle)
+	{
+		Resource* pResource = nullptr;
+		decodeAllocationHandle(handle, &pResource, nullptr);
+
+		pResource->pDXResource->Unmap(0, nullptr);
 	}
 
 	const ResourceAllocation& GPUResourceManager::getAllocation(AllocationHandle handle)
@@ -223,7 +244,7 @@ namespace Okay
 		return desc;
 	}
 
-	void GPUResourceManager::updateBufferInternal(const Resource& resource, const ResourceAllocation& allocation, void* pData)
+	void GPUResourceManager::updateBufferInternal(const Resource& resource, const ResourceAllocation& allocation, const void* pData)
 	{
 		if (resource.heapType == D3D12_HEAP_TYPE_DEFAULT)
 		{
@@ -235,7 +256,7 @@ namespace Okay
 		}
 	}
 
-	void GPUResourceManager::updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, void* pData)
+	void GPUResourceManager::updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, const void* pData)
 	{
 		if (m_uploadHeapCurrentSize + byteSize > m_uploadHeapMaxSize)
 		{
@@ -257,7 +278,7 @@ namespace Okay
 		m_uploadHeapCurrentSize = alignAddress64(m_uploadHeapCurrentSize + (uint64_t)byteSize, BUFFER_DATA_ALIGNMENT);
 	}
 
-	void GPUResourceManager::updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, void* pData)
+	void GPUResourceManager::updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, const void* pData)
 	{
 		D3D12_RANGE readRange = { 0, 0 };
 
@@ -371,7 +392,7 @@ namespace Okay
 		OKAY_ASSERT(allocationIndex < (uint16_t)m_allocations.size());
 	}
 
-	AllocationHandle GPUResourceManager::addBufferInternal(ResourceHandle handle, uint32_t elementSize, uint32_t elementCount, void* pData)
+	AllocationHandle GPUResourceManager::addBufferInternal(ResourceHandle handle, uint32_t elementSize, uint32_t elementCount, const void* pData)
 	{
 		validateResourceHandle(handle);
 		Resource& resoruce = m_resources[handle];

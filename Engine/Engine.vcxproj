@@ -28,6 +28,7 @@
     <ClInclude Include="source\Engine\Graphics\RenderPass.h" />
     <ClInclude Include="source\Engine\OkayD3D12.h" />
     <ClInclude Include="source\Engine\Resources\Mesh.h" />
+    <ClInclude Include="source\Engine\Resources\ResourceManager.h" />
     <ClInclude Include="source\Engine\Scene\Components.h" />
     <ClInclude Include="source\Engine\Scene\Entity.h" />
     <ClInclude Include="source\Engine\Scene\Scene.h" />
@@ -44,6 +45,7 @@
     <ClCompile Include="source\Engine\Application\Application.cpp" />
     <ClCompile Include="source\Engine\Application\Window.cpp" />
     <ClCompile Include="source\Engine\Graphics\RenderPass.cpp" />
+    <ClCompile Include="source\Engine\Resources\ResourceManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="resources\Shaders\PixelShader.hlsl">
@@ -142,7 +144,7 @@
       <PreprocessorDefinitions>NOMINMAX;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)source;$(ProjectDir)deps\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)source\;$(ProjectDir)deps\include\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -162,7 +164,7 @@
       <PreprocessorDefinitions>NOMINMAX;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)source;$(ProjectDir)deps\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)source\;$(ProjectDir)deps\include\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -182,7 +184,7 @@
       <PreprocessorDefinitions>NOMINMAX;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)source;$(ProjectDir)deps\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)source\;$(ProjectDir)deps\include\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -202,7 +204,7 @@
       <PreprocessorDefinitions>NOMINMAX;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)source;$(ProjectDir)deps\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)source\;$(ProjectDir)deps\include\</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

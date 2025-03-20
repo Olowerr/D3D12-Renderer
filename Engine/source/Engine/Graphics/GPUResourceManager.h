@@ -40,16 +40,19 @@ namespace Okay
 		void initialize(ID3D12Device* pDevice, CommandContext& commandContext);
 		void shutdown();
 
-		AllocationHandle createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, void* pData);
+		AllocationHandle createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, const void* pData);
 
 		ResourceHandle createResource(D3D12_HEAP_TYPE heapType, uint64_t size);
-		AllocationHandle addConstantBuffer(ResourceHandle resourceHandle, uint32_t byteSize, void* pData);
-		AllocationHandle addStructuredBuffer(ResourceHandle resourceHandle,uint32_t elementSize, uint32_t elementCount, void* pData);
+		AllocationHandle addConstantBuffer(ResourceHandle resourceHandle, uint32_t byteSize, const void* pData);
+		AllocationHandle addStructuredBuffer(ResourceHandle resourceHandle,uint32_t elementSize, uint32_t elementCount, const void* pData);
 
-		void updateBuffer(AllocationHandle handle, void* pData);
+		void updateBuffer(AllocationHandle handle, const void* pData);
 
 		ID3D12Resource* getDXResource(AllocationHandle handle);
 		D3D12_GPU_VIRTUAL_ADDRESS getVirtualAddress(AllocationHandle handle);
+
+		void* mapResource(ResourceHandle handle);
+		void unmapResource(ResourceHandle handle);
 
 		const ResourceAllocation& getAllocation(AllocationHandle handle);
 		uint32_t getTotalSize(AllocationHandle handle);
@@ -60,11 +63,11 @@ namespace Okay
 		void createUploadResource(ID3D12Resource** ppResource, uint64_t byteSize);
 		void resizeUploadBuffer(uint64_t newSize);
 
-		AllocationHandle addBufferInternal(ResourceHandle handle, uint32_t elementSize, uint32_t elementCount, void* pData);
+		AllocationHandle addBufferInternal(ResourceHandle handle, uint32_t elementSize, uint32_t elementCount, const void* pData);
 	
-		void updateBufferInternal(const Resource& resource, const ResourceAllocation& allocation, void* pData);
-		void updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, void* pData);
-		void updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, void* pData);
+		void updateBufferInternal(const Resource& resource, const ResourceAllocation& allocation, const void* pData);
+		void updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, const void* pData);
+		void updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, const void* pData);
 		void updateTexture(ID3D12Resource* pDXResource, unsigned char* pData);
 
 		AllocationHandle generateAllocationHandle(ResourceHandle resourceHandle, uint16_t allocationIndex);

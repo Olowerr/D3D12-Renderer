@@ -3,6 +3,8 @@
 #include "Window.h"
 #include "Engine/Scene/Scene.h"
 #include "Engine/Graphics/Renderer.h"
+#include "Engine/Resources/ResourceManager.h"
+
 #include "Time.h"
 
 namespace Okay
@@ -24,6 +26,7 @@ namespace Okay
 	private:
 		Window m_window;
 		Renderer m_renderer;
+		ResourceManager m_resourceManager;
 
 	};
 }
