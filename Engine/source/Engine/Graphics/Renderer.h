@@ -58,14 +58,14 @@ namespace Okay
 		uint32_t m_dsvDescriptorSize = INVALID_UINT32;
 
 	private:
-		AllocationHandle m_renderDataAH = INVALID_AH;
-		AllocationHandle m_instancedObjectDataAH = INVALID_AH;
+		Allocation m_renderData;
+		Allocation m_instancedObjectData;
 
 	private: // temp
 		RenderPass m_mainRenderPass;
-		AllocationHandle m_triangleColourAH = INVALID_AH;
-		AllocationHandle m_vertexBufferAH = INVALID_AH;
-		AllocationHandle m_indexBufferAH = INVALID_AH;
+		Allocation m_triangleColour;
+		Allocation m_vertexBuffer;
+		Allocation m_indexBuffer;
 		void createMainRenderPass();
 	};
 }

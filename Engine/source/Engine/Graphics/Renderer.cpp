@@ -44,8 +44,8 @@ namespace Okay
 
 		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, RESOURCE_PLACEMENT_ALIGNMENT);
 
-		m_renderDataAH = m_gpuResourceManager.addConstantBuffer(renderDataResource, sizeof(GPURenderData), nullptr);
-		m_instancedObjectDataAH = m_gpuResourceManager.addStructuredBuffer(renderDataResource, sizeof(GPUObjectData), 10, nullptr);
+		m_renderData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPURenderData), 1, nullptr);
+		m_instancedObjectData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPUObjectData), 10, nullptr);
 
 		struct Vertex
 		{
@@ -67,11 +67,11 @@ namespace Okay
 
 
 		ResourceHandle triangleBufferRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, 1'000);
-		m_triangleColourAH = m_gpuResourceManager.addConstantBuffer(triangleBufferRH, 16, nullptr);
-		m_vertexBufferAH = m_gpuResourceManager.addStructuredBuffer(triangleBufferRH, sizeof(verticies[0]), _countof(verticies), &verticies);
+		m_triangleColour = m_gpuResourceManager.allocateInto(triangleBufferRH, OKAY_RESOURCE_APPEND, 16, 1, nullptr);
+		m_vertexBuffer = m_gpuResourceManager.allocateInto(triangleBufferRH, OKAY_RESOURCE_APPEND, sizeof(verticies[0]), _countof(verticies), &verticies);
 
 		ResourceHandle indexBufferRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, sizeof(indicies));
-		m_indexBufferAH = m_gpuResourceManager.addStructuredBuffer(indexBufferRH, sizeof(indicies[0]), _countof(indicies), &indicies);
+		m_indexBuffer = m_gpuResourceManager.allocateInto(indexBufferRH, 0, sizeof(indicies[0]), _countof(indicies), &indicies);
 		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(indexBufferRH), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	}
 
@@ -111,10 +111,10 @@ namespace Okay
 		renderData.cameraDir = camTransform.forwardVec();
 		renderData.viewProjMatrix = glm::transpose(cameraComp.getProjectionMatrix(m_viewport.Width, m_viewport.Height) * camTransform.getViewMatrix());
 
-		m_gpuResourceManager.updateBuffer(m_renderDataAH, &renderData);
+		m_gpuResourceManager.updateBuffer(m_renderData, &renderData);
 
 		glm::vec4 colour = glm::vec4(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, 1.f);
-		m_gpuResourceManager.updateBuffer(m_triangleColourAH, &colour);
+		m_gpuResourceManager.updateBuffer(m_triangleColour, &colour);
 	}
 
 	void Renderer::preRender()
@@ -146,14 +146,14 @@ namespace Okay
 
 		m_mainRenderPass.bind(pCommandList);
 
-		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderDataAH));
-		pCommandList->SetGraphicsRootShaderResourceView(1, m_gpuResourceManager.getVirtualAddress(m_instancedObjectDataAH));
-		pCommandList->SetGraphicsRootConstantBufferView(2, m_gpuResourceManager.getVirtualAddress(m_triangleColourAH));
-		pCommandList->SetGraphicsRootShaderResourceView(3, m_gpuResourceManager.getVirtualAddress(m_vertexBufferAH));
+		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderData));
+		pCommandList->SetGraphicsRootShaderResourceView(1, m_gpuResourceManager.getVirtualAddress(m_instancedObjectData));
+		pCommandList->SetGraphicsRootConstantBufferView(2, m_gpuResourceManager.getVirtualAddress(m_triangleColour));
+		pCommandList->SetGraphicsRootShaderResourceView(3, m_gpuResourceManager.getVirtualAddress(m_vertexBuffer));
 
 		D3D12_INDEX_BUFFER_VIEW ibView = {};
-		ibView.BufferLocation = m_gpuResourceManager.getVirtualAddress(m_indexBufferAH);
-		ibView.SizeInBytes = m_gpuResourceManager.getTotalSize(m_indexBufferAH);
+		ibView.BufferLocation = m_gpuResourceManager.getVirtualAddress(m_indexBuffer);
+		ibView.SizeInBytes = (uint32_t)m_indexBuffer.elementSize * m_indexBuffer.numElements;
 		ibView.Format = DXGI_FORMAT_R32_UINT;
 
 		pCommandList->IASetIndexBuffer(&ibView);
@@ -162,7 +162,7 @@ namespace Okay
 		uint32_t numMeshRenders = (uint32_t)meshRendererView.size_hint();
 
 		// Temp
-		OKAY_ASSERT(numMeshRenders <= m_gpuResourceManager.getAllocation(m_instancedObjectDataAH).numElements);
+		OKAY_ASSERT(numMeshRenders <= m_instancedObjectData.numElements);
 
 		static std::vector<GPUObjectData> objectDatas;
 		objectDatas.reserve(numMeshRenders);
@@ -176,7 +176,7 @@ namespace Okay
 			objectData.objectMatrix = glm::transpose(transform.getMatrix());
 		}
 
-		m_gpuResourceManager.updateBuffer(m_instancedObjectDataAH, objectDatas.data());
+		m_gpuResourceManager.updateBuffer(m_instancedObjectData, objectDatas.data());
 		pCommandList->DrawIndexedInstanced(3, numMeshRenders, 0, 0, 0);
 	}
 
@@ -256,12 +256,12 @@ namespace Okay
 
 		// Create depth stencil texture & descriptor
 		D3D12_RESOURCE_DESC resourceDesc = m_backBuffers[0]->GetDesc();
-		ResourceHandle dsHandle = m_gpuResourceManager.createTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
+		Allocation dsAllocation = m_gpuResourceManager.createTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
 
-		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsHandle, OKAY_DESCRIPTOR_TYPE_DSV, true);
+		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsAllocation, OKAY_DESCRIPTOR_TYPE_DSV, true);
 		m_dsvDescriptor = m_descriptorHeapStore.createDescriptors(1, &dsvDesc, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
-		ID3D12Resource* pDsvResource = m_gpuResourceManager.getDXResource(dsHandle);
+		ID3D12Resource* pDsvResource = m_gpuResourceManager.getDXResource(dsAllocation.resourceHandle);
 		m_commandContext.transitionResource(pDsvResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 		// Find viewport & scissor rect

@@ -26,8 +26,6 @@ namespace Okay
 
 		m_resources.clear();
 
-		m_allocations.clear();
-
 		m_heapStore.shutdown();
 
 		D3D12_RELEASE(m_pUploadBuffer);
@@ -35,14 +33,13 @@ namespace Okay
 		m_pDevice = nullptr;
 	}
 
-	AllocationHandle GPUResourceManager::createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, const void* pData)
+	Allocation GPUResourceManager::createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, const void* pData)
 	{
 		OKAY_ASSERT(width);
 		OKAY_ASSERT(height);
 		OKAY_ASSERT(TextureFlags(flags) != OKAY_TEXTURE_FLAG_NONE);
 
 		uint16_t resourceIdx = (uint16_t)m_resources.size();
-		uint16_t allocationIdx = (uint16_t)m_allocations.size();
 
 		bool isDepth = flags & OKAY_TEXTURE_FLAG_DEPTH;
 
@@ -72,20 +69,21 @@ namespace Okay
 		D3D12_RESOURCE_DESC desc = resource.pDXResource->GetDesc();
 		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &desc);
 
-		resource.usedSize = resourceAllocationInfo.SizeInBytes;
+		resource.nextAppendOffset = resourceAllocationInfo.SizeInBytes;
 		resource.maxSize = resourceAllocationInfo.SizeInBytes;
-
-		ResourceAllocation& allocation = m_allocations.emplace_back();
-		allocation.elementSize = (uint32_t)resource.usedSize;
-		allocation.numElements = 1;
-		allocation.resourceOffset = 0;
 
 		if (pData)
 		{
 			updateTexture(resource.pDXResource, (unsigned char*)pData);
 		}
 
-		return generateAllocationHandle(resourceIdx, allocationIdx);
+		Allocation allocation = {};
+		allocation.resourceHandle = (ResourceHandle)resourceIdx;
+		allocation.resourceOffset = 0;
+		allocation.elementSize = resource.maxSize;
+		allocation.numElements = 1;
+
+		return allocation;
 	}
 
 	ResourceHandle GPUResourceManager::createResource(D3D12_HEAP_TYPE heapType, uint64_t size)
@@ -99,111 +97,99 @@ namespace Okay
 		resource.pDXResource = m_heapStore.requestResource(heapType, size, 1, 1, DXGI_FORMAT_UNKNOWN, nullptr, false);
 		resource.heapType = heapType;
 
-		resource.usedSize = 0;
+		resource.nextAppendOffset = 0;
 		resource.maxSize = size;
 
 		return handle;
 	}
 
-	AllocationHandle GPUResourceManager::addConstantBuffer(ResourceHandle resourceHandle, uint32_t byteSize, const void* pData)
+	Allocation GPUResourceManager::allocateInto(ResourceHandle handle, uint64_t offset, uint64_t elementSize, uint32_t numElements, const void* pData)
 	{
-		if (byteSize == 0)
+		validateResourceHandle(handle);
+		Resource& resource = m_resources[handle];
+
+		if (offset == 0 && elementSize == 0 && numElements == 1)
 		{
-			validateResourceHandle(resourceHandle);
-			byteSize = (uint32_t)m_resources[resourceHandle].maxSize;
+			elementSize = resource.maxSize;
+		}
+		else if (offset == OKAY_RESOURCE_APPEND)
+		{
+			offset = resource.nextAppendOffset;
+			OKAY_ASSERT(offset + elementSize * numElements <= resource.maxSize - resource.nextAppendOffset);
+
+			resource.nextAppendOffset += alignAddress64(elementSize * numElements, BUFFER_DATA_ALIGNMENT);
 		}
 
-		return addBufferInternal(resourceHandle, byteSize, 1, pData);
+		Allocation allocation = {};
+		allocation.resourceHandle = handle;
+		allocation.resourceOffset = alignAddress64(offset, BUFFER_DATA_ALIGNMENT);
+		allocation.elementSize = elementSize;
+		allocation.numElements = numElements;
+
+		if (pData)
+		{
+			updateBuffer(allocation, pData);
+		}
+
+		return allocation;
 	}
 
-	AllocationHandle GPUResourceManager::addStructuredBuffer(ResourceHandle resourceHandle, uint32_t elementSize, uint32_t elementCount, const void* pData)
+	void GPUResourceManager::updateBuffer(const Allocation& allocation, const void* pData)
 	{
-		OKAY_ASSERT(elementSize);
-		OKAY_ASSERT(elementCount);
+		validateResourceHandle(allocation.resourceHandle);
+		Resource& resource = m_resources[allocation.resourceHandle];
 
-		return addBufferInternal(resourceHandle, elementSize, elementCount, pData);
+		if (resource.heapType == D3D12_HEAP_TYPE_DEFAULT)
+		{
+			updateBufferUpload(resource.pDXResource, allocation.resourceOffset, allocation.elementSize * allocation.numElements, pData);
+		}
+		else
+		{
+			updateBufferDirect(resource.pDXResource, allocation.resourceOffset, allocation.elementSize * allocation.numElements, pData);
+		}
 	}
 
-	void GPUResourceManager::updateBuffer(AllocationHandle handle, const void* pData)
+	ID3D12Resource* GPUResourceManager::getDXResource(ResourceHandle handle)
 	{
-		Resource* pResource = nullptr;
-		ResourceAllocation* pAllocation = nullptr;
-
-		decodeAllocationHandle(handle, &pResource, &pAllocation);
-
-		updateBufferInternal(*pResource, *pAllocation, pData);
+		validateResourceHandle(handle);
+		return m_resources[handle].pDXResource;
 	}
 
-	ID3D12Resource* GPUResourceManager::getDXResource(AllocationHandle handle)
+	D3D12_GPU_VIRTUAL_ADDRESS GPUResourceManager::getVirtualAddress(const Allocation& allocation)
 	{
-		Resource* pResource = nullptr;
-		decodeAllocationHandle(handle, &pResource, nullptr);
-
-		return pResource->pDXResource;
-	}
-
-	D3D12_GPU_VIRTUAL_ADDRESS GPUResourceManager::getVirtualAddress(AllocationHandle handle)
-	{
-		Resource* pResource = nullptr;
-		ResourceAllocation* pAllocation = nullptr;
-
-		decodeAllocationHandle(handle, &pResource, &pAllocation);
-
-		return pResource->pDXResource->GetGPUVirtualAddress() + pAllocation->resourceOffset;
+		ID3D12Resource* pDXResource = getDXResource(allocation.resourceHandle);
+		return pDXResource->GetGPUVirtualAddress() + allocation.resourceOffset;
 	}
 
 	void* GPUResourceManager::mapResource(ResourceHandle handle)
 	{
-		Resource* pResource = nullptr;
-		decodeAllocationHandle(handle, &pResource, nullptr);
+		ID3D12Resource* pDXResource = getDXResource(handle);
 
 		D3D12_RANGE readRange = { 0, 0 };
 
 		void* pMappedData = nullptr;
-		DX_CHECK(pResource->pDXResource->Map(0, &readRange, &pMappedData));
+		DX_CHECK(pDXResource->Map(0, &readRange, &pMappedData));
 
 		return pMappedData;
 	}
 
 	void GPUResourceManager::unmapResource(ResourceHandle handle)
 	{
-		Resource* pResource = nullptr;
-		decodeAllocationHandle(handle, &pResource, nullptr);
-
-		pResource->pDXResource->Unmap(0, nullptr);
+		ID3D12Resource* pDXResource = getDXResource(handle);
+		pDXResource->Unmap(0, nullptr);
 	}
 
-	const ResourceAllocation& GPUResourceManager::getAllocation(AllocationHandle handle)
-	{
-		ResourceAllocation* pAllocation = nullptr;
-		decodeAllocationHandle(handle, nullptr, &pAllocation);
-
-		return *pAllocation;
-	}
-
-	uint32_t GPUResourceManager::getTotalSize(AllocationHandle handle)
-	{
-		ResourceAllocation* pAllocation = nullptr;
-		decodeAllocationHandle(handle, nullptr, &pAllocation);
-
-		return pAllocation->elementSize * pAllocation->numElements;
-	}
-
-	DescriptorDesc GPUResourceManager::createDescriptorDesc(AllocationHandle handle, DescriptorType type, bool nullDesc)
+	DescriptorDesc GPUResourceManager::createDescriptorDesc(const Allocation& allocation, DescriptorType type, bool nullDesc)
 	{
 		// handle asserted in decodeHandle
 		OKAY_ASSERT(type != OKAY_DESCRIPTOR_TYPE_NONE);
 
-		Resource* pResource = nullptr;
-		ResourceAllocation* pAllocation = nullptr;
-
-		decodeAllocationHandle(handle, &pResource, &pAllocation);
+		ID3D12Resource* pDXResource = getDXResource(allocation.resourceHandle);
 
 		DescriptorDesc desc = {};
-
 		desc.type = type;
 		desc.nullDesc = nullDesc;
-		desc.pDXResource = pResource->pDXResource;
+		desc.pDXResource = pDXResource;
 
 		if (nullDesc)
 		{
@@ -218,14 +204,14 @@ namespace Okay
 			desc.srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 
 			desc.srvDesc.Buffer.FirstElement = 0; // might not be...or?
-			desc.srvDesc.Buffer.NumElements = pAllocation->numElements;
-			desc.srvDesc.Buffer.StructureByteStride = pAllocation->elementSize;
+			desc.srvDesc.Buffer.NumElements = allocation.numElements;
+			desc.srvDesc.Buffer.StructureByteStride = (uint32_t)allocation.elementSize;
 			desc.srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 			break;
 
 		case OKAY_DESCRIPTOR_TYPE_CBV:
-			desc.cbvDesc.BufferLocation = pResource->pDXResource->GetGPUVirtualAddress() + pAllocation->resourceOffset;
-			desc.cbvDesc.SizeInBytes = alignAddress32(pAllocation->elementSize * pAllocation->numElements, BUFFER_DATA_ALIGNMENT);
+			desc.cbvDesc.BufferLocation = pDXResource->GetGPUVirtualAddress() + allocation.resourceOffset;
+			desc.cbvDesc.SizeInBytes = alignAddress32((uint32_t)allocation.elementSize * allocation.numElements, BUFFER_DATA_ALIGNMENT);
 			break;
 
 		case OKAY_DESCRIPTOR_TYPE_UAV:
@@ -244,19 +230,7 @@ namespace Okay
 		return desc;
 	}
 
-	void GPUResourceManager::updateBufferInternal(const Resource& resource, const ResourceAllocation& allocation, const void* pData)
-	{
-		if (resource.heapType == D3D12_HEAP_TYPE_DEFAULT)
-		{
-			updateBufferUpload(resource.pDXResource, allocation.resourceOffset, allocation.elementSize * allocation.numElements, pData);
-		}
-		else
-		{
-			updateBufferDirect(resource.pDXResource, allocation.resourceOffset, allocation.elementSize * allocation.numElements, pData);
-		}
-	}
-
-	void GPUResourceManager::updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, const void* pData)
+	void GPUResourceManager::updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData)
 	{
 		if (m_uploadHeapCurrentSize + byteSize > m_uploadHeapMaxSize)
 		{
@@ -278,7 +252,7 @@ namespace Okay
 		m_uploadHeapCurrentSize = alignAddress64(m_uploadHeapCurrentSize + (uint64_t)byteSize, BUFFER_DATA_ALIGNMENT);
 	}
 
-	void GPUResourceManager::updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint32_t byteSize, const void* pData)
+	void GPUResourceManager::updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData)
 	{
 		D3D12_RANGE readRange = { 0, 0 };
 
@@ -349,72 +323,9 @@ namespace Okay
 		D3D12_RELEASE(pUploadResource);
 	}
 
-	AllocationHandle GPUResourceManager::generateAllocationHandle(ResourceHandle resourceHandle, uint16_t allocationIndex)
-	{
-		AllocationHandle handle = 0;
-		uint16_t* pHandle = (uint16_t*)&handle;
-
-		pHandle[HANDLE_RESOURCE_IDX_SLOT] = resourceHandle;
-		pHandle[HANDLE_ALLOCATION_IDX_SLOT] = allocationIndex;
-
-		return handle;
-	}
-
-	void GPUResourceManager::decodeAllocationHandle(AllocationHandle handle, Resource** ppOutResource, ResourceAllocation** ppOutAllocation)
-	{
-		validateAllocationHandle(handle);
-
-		uint16_t* pHandle = (uint16_t*)&handle;
-
-		uint16_t resourceIndex = pHandle[HANDLE_RESOURCE_IDX_SLOT];
-		uint16_t allocationIndex = pHandle[HANDLE_ALLOCATION_IDX_SLOT];
-
-		if (ppOutResource)
-			*ppOutResource = &m_resources[resourceIndex];
-		
-		if (ppOutAllocation)
-			*ppOutAllocation = &m_allocations[allocationIndex];
-	}
-
 	void GPUResourceManager::validateResourceHandle(ResourceHandle handle)
 	{
-		OKAY_ASSERT(handle < (uint16_t)m_resources.size());
-	}
-
-	void GPUResourceManager::validateAllocationHandle(AllocationHandle handle)
-	{
-		uint16_t* pHandle = (uint16_t*)&handle;
-
-		uint16_t resourceIndex = pHandle[HANDLE_RESOURCE_IDX_SLOT];
-		uint16_t allocationIndex = pHandle[HANDLE_ALLOCATION_IDX_SLOT];
-
-		OKAY_ASSERT(resourceIndex < (uint16_t)m_resources.size());
-		OKAY_ASSERT(allocationIndex < (uint16_t)m_allocations.size());
-	}
-
-	AllocationHandle GPUResourceManager::addBufferInternal(ResourceHandle handle, uint32_t elementSize, uint32_t elementCount, const void* pData)
-	{
-		validateResourceHandle(handle);
-		Resource& resoruce = m_resources[handle];
-
-		uint32_t gpuAllocationSize = alignAddress32(elementSize * elementCount, BUFFER_DATA_ALIGNMENT);
-		OKAY_ASSERT(gpuAllocationSize <= resoruce.maxSize - resoruce.usedSize);
-
-		uint16_t allocationIdx = (uint16_t)m_allocations.size();
-
-		ResourceAllocation& allocation = m_allocations.emplace_back();
-		allocation.resourceOffset = resoruce.usedSize;
-		allocation.numElements = elementCount;
-		allocation.elementSize = elementSize;
-
-		if (pData)
-		{
-			updateBufferInternal(resoruce, allocation, pData);
-		}
-
-		resoruce.usedSize += gpuAllocationSize;
-
-		return generateAllocationHandle(handle, allocationIdx);
+		OKAY_ASSERT(handle < (ResourceHandle)m_resources.size());
 	}
 
 	void GPUResourceManager::createUploadResource(ID3D12Resource** ppDXResource, uint64_t byteSize)
