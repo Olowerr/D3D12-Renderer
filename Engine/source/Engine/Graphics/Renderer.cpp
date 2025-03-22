@@ -1,4 +1,5 @@
 #include "Renderer.h"
+#include "Engine/Resources/ResourceManager.h"
 
 namespace Okay
 {
@@ -43,36 +44,8 @@ namespace Okay
 		createMainRenderPass();
 
 		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, RESOURCE_PLACEMENT_ALIGNMENT);
-
 		m_renderData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPURenderData), 1, nullptr);
 		m_instancedObjectData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPUObjectData), 10, nullptr);
-
-		struct Vertex
-		{
-			glm::vec3 position;
-			glm::vec4 colour;
-		};
-
-		Vertex verticies[] =
-		{
-			{.position = glm::vec3(-0.5f, -0.5f, 0.f), .colour = glm::vec4(1.f, 0.f, 0.f, 1.f) },
-			{.position = glm::vec3(0.5f, -0.5f, 0.0f), .colour = glm::vec4(0.f, 0.f, 1.f, 1.f) },
-			{.position = glm::vec3(0.f, 0.5f, 0.f), .colour = glm::vec4(0.f, 1.f, 0.f, 1.f) },
-		};
-
-		uint32_t indicies[] =
-		{
-			0, 2, 1
-		};
-
-
-		ResourceHandle triangleBufferRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, 1'000);
-		m_triangleColour = m_gpuResourceManager.allocateInto(triangleBufferRH, OKAY_RESOURCE_APPEND, 16, 1, nullptr);
-		m_vertexBuffer = m_gpuResourceManager.allocateInto(triangleBufferRH, OKAY_RESOURCE_APPEND, sizeof(verticies[0]), _countof(verticies), &verticies);
-
-		ResourceHandle indexBufferRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, sizeof(indicies));
-		m_indexBuffer = m_gpuResourceManager.allocateInto(indexBufferRH, 0, sizeof(indicies[0]), _countof(indicies), &indicies);
-		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(indexBufferRH), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	}
 
 	void Renderer::shutdown()
@@ -100,6 +73,45 @@ namespace Okay
 		postRender();
 	}
 
+	void Renderer::preProcessResources(const ResourceManager& resourceManager)
+	{
+		const std::vector<Mesh>& meshes = resourceManager.getAll<Mesh>();
+
+		uint64_t verticiesResourceSize = 0;
+		uint64_t indiciesResourceSize = 0;
+
+		for (const Mesh& mesh : meshes)
+		{
+			const MeshData& meshData = mesh.getMeshData();
+			verticiesResourceSize += alignAddress64(meshData.verticies.size() * sizeof(Vertex), BUFFER_DATA_ALIGNMENT);
+			indiciesResourceSize += alignAddress64(meshData.indicies.size() * sizeof(uint32_t), BUFFER_DATA_ALIGNMENT);
+		}
+
+		ResourceHandle verticiesRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, verticiesResourceSize);
+		ResourceHandle indiciesRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, indiciesResourceSize);
+
+		m_dxMeshes.resize(meshes.size());
+
+		for (uint32_t i = 0; i < (uint32_t)meshes.size(); i++)
+		{
+			const std::vector<Vertex>& verticies = meshes[i].getMeshData().verticies;
+			const std::vector<uint32_t>& indicies = meshes[i].getMeshData().indicies;
+
+			Allocation verticiesAlloc = m_gpuResourceManager.allocateInto(verticiesRH, OKAY_RESOURCE_APPEND, sizeof(Vertex), (uint32_t)verticies.size(), verticies.data());
+			Allocation indiciesAlloc = m_gpuResourceManager.allocateInto(indiciesRH, OKAY_RESOURCE_APPEND, sizeof(uint32_t), (uint32_t)indicies.size(), indicies.data());
+
+			m_dxMeshes[i].gpuVerticies = m_gpuResourceManager.getVirtualAddress(verticiesAlloc);
+
+			m_dxMeshes[i].indiciesView.BufferLocation = m_gpuResourceManager.getVirtualAddress(indiciesAlloc);
+			m_dxMeshes[i].indiciesView.SizeInBytes = (uint32_t)indiciesAlloc.elementSize * indiciesAlloc.numElements;
+			m_dxMeshes[i].indiciesView.Format = DXGI_FORMAT_R32_UINT;
+
+			m_dxMeshes[i].numIndicies = (uint32_t)indicies.size();
+		}
+
+		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(indiciesRH), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+	}
+
 	void Renderer::updateBuffers(const Scene& scene)
 	{
 		const Entity camEntity = scene.getActiveCamera();
@@ -112,9 +124,6 @@ namespace Okay
 		renderData.viewProjMatrix = glm::transpose(cameraComp.getProjectionMatrix(m_viewport.Width, m_viewport.Height) * camTransform.getViewMatrix());
 
 		m_gpuResourceManager.updateBuffer(m_renderData, &renderData);
-
-		glm::vec4 colour = glm::vec4(rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, rand() / (float)RAND_MAX, 1.f);
-		m_gpuResourceManager.updateBuffer(m_triangleColour, &colour);
 	}
 
 	void Renderer::preRender()
@@ -147,37 +156,41 @@ namespace Okay
 		m_mainRenderPass.bind(pCommandList);
 
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderData));
-		pCommandList->SetGraphicsRootShaderResourceView(1, m_gpuResourceManager.getVirtualAddress(m_instancedObjectData));
-		pCommandList->SetGraphicsRootConstantBufferView(2, m_gpuResourceManager.getVirtualAddress(m_triangleColour));
-		pCommandList->SetGraphicsRootShaderResourceView(3, m_gpuResourceManager.getVirtualAddress(m_vertexBuffer));
 
-		D3D12_INDEX_BUFFER_VIEW ibView = {};
-		ibView.BufferLocation = m_gpuResourceManager.getVirtualAddress(m_indexBuffer);
-		ibView.SizeInBytes = (uint32_t)m_indexBuffer.elementSize * m_indexBuffer.numElements;
-		ibView.Format = DXGI_FORMAT_R32_UINT;
 
-		pCommandList->IASetIndexBuffer(&ibView);
+		/*
+			When introducing draw groups, each group will have to call SetGraphicsRootShaderResourceView themselves,
+			where the virtualAddress is offseted to start at the first GPUObjectData for that group.
+			The virtualAddress does not need to be aligned to 256 (need to be aligned to 4 tho), all GPUObjectData's can be right after one another, even between drawGroups,
+			it just starts at where ever the virtualAddress refers to.
+		*/
+		pCommandList->SetGraphicsRootShaderResourceView(2, m_gpuResourceManager.getVirtualAddress(m_instancedObjectData));
 
 		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
 		uint32_t numMeshRenders = (uint32_t)meshRendererView.size_hint();
+	
+		unsigned char* pMappedPtr = (unsigned char*)m_gpuResourceManager.mapResource(m_instancedObjectData.resourceHandle);
+		pMappedPtr += m_instancedObjectData.resourceOffset;
 
 		// Temp
-		OKAY_ASSERT(numMeshRenders <= m_instancedObjectData.numElements);
+		const DXMesh& cubeMesh = m_dxMeshes[0];
 
-		static std::vector<GPUObjectData> objectDatas;
-		objectDatas.reserve(numMeshRenders);
-		objectDatas.clear();
+		pCommandList->SetGraphicsRootShaderResourceView(1, cubeMesh.gpuVerticies);
+		pCommandList->IASetIndexBuffer(&cubeMesh.indiciesView);
 
 		for (entt::entity entity : meshRendererView)
 		{
 			auto [meshRenderer, transform] = meshRendererView[entity];
 
-			GPUObjectData& objectData = objectDatas.emplace_back();
-			objectData.objectMatrix = glm::transpose(transform.getMatrix());
+			GPUObjectData* pObjectData = (GPUObjectData*)pMappedPtr;
+			pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
+
+			pMappedPtr += sizeof(GPUObjectData);
 		}
 
-		m_gpuResourceManager.updateBuffer(m_instancedObjectData, objectDatas.data());
-		pCommandList->DrawIndexedInstanced(3, numMeshRenders, 0, 0, 0);
+		m_gpuResourceManager.unmapResource(m_instancedObjectData.resourceHandle);
+
+		pCommandList->DrawIndexedInstanced(cubeMesh.numIndicies, meshRendererView.size_hint(), 0, 0, 0);
 	}
 
 	void Renderer::postRender()
@@ -282,27 +295,26 @@ namespace Okay
 
 	void Renderer::createMainRenderPass()
 	{
-		D3D12_ROOT_PARAMETER rootParams[4] = {};
+		D3D12_ROOT_PARAMETER rootParams[3] = {};
 
+		// Main Render Data (GPURenderData)
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 		rootParams[0].Descriptor.ShaderRegister = 0;
 		rootParams[0].Descriptor.RegisterSpace = 0;
 		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
+		// Verticies SRV
 		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[1].Descriptor.ShaderRegister = 1;
+		rootParams[1].Descriptor.ShaderRegister = 0;
 		rootParams[1].Descriptor.RegisterSpace = 0;
 		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-		rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		rootParams[2].Descriptor.ShaderRegister = 2;
+		
+		// Object datas (GPUObjcetData)
+		rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		rootParams[2].Descriptor.ShaderRegister = 1;
 		rootParams[2].Descriptor.RegisterSpace = 0;
-		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-		rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[3].Descriptor.ShaderRegister = 3;
-		rootParams[3].Descriptor.RegisterSpace = 0;
-		rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
 		rootSignatureDesc.NumParameters = _countof(rootParams);

@@ -45,6 +45,7 @@ namespace Okay
 		ResourceHandle createResource(D3D12_HEAP_TYPE heapType, uint64_t size);
 		Allocation allocateInto(ResourceHandle handle, uint64_t offset, uint64_t elementSize, uint32_t numElements, const void* pData);
 
+		// TODO: Rename to updateAllocation?
 		void updateBuffer(const Allocation& allocation, const void* pData);
 
 		ID3D12Resource* getDXResource(ResourceHandle handle);

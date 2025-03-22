@@ -6,7 +6,14 @@
 
 namespace Okay
 {
-	inline const std::filesystem::path SHADER_PATH = std::filesystem::path("..") / "Engine" / "resources" / "Shaders";
+	class ResourceManager;
+
+	struct DXMesh
+	{
+		D3D12_GPU_VIRTUAL_ADDRESS gpuVerticies = {};
+		D3D12_INDEX_BUFFER_VIEW indiciesView = {};
+		uint32_t numIndicies = INVALID_UINT32;
+	};
 
 	class Renderer
 	{
@@ -22,6 +29,8 @@ namespace Okay
 
 		void render(const Scene& scene);
 
+		void preProcessResources(const ResourceManager& resourceManager);
+
 	private:
 		void updateBuffers(const Scene& scene);
 		void preRender();
@@ -35,6 +44,8 @@ namespace Okay
 
 		void createSwapChain(IDXGIFactory* pFactory, const Window& window);
 		void fetchBackBuffersAndDSV();
+
+		void createMainRenderPass();
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
@@ -60,12 +71,8 @@ namespace Okay
 	private:
 		Allocation m_renderData;
 		Allocation m_instancedObjectData;
-
-	private: // temp
 		RenderPass m_mainRenderPass;
-		Allocation m_triangleColour;
-		Allocation m_vertexBuffer;
-		Allocation m_indexBuffer;
-		void createMainRenderPass();
+
+		std::vector<DXMesh> m_dxMeshes;
 	};
 }

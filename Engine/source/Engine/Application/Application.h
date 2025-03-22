@@ -22,11 +22,11 @@ namespace Okay
 
 	protected:
 		Scene m_scene;
+		ResourceManager m_resourceManager;
 
 	private:
 		Window m_window;
 		Renderer m_renderer;
-		ResourceManager m_resourceManager;
 
 	};
 }

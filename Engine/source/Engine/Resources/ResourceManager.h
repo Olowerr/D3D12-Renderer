@@ -2,7 +2,7 @@
 
 #include "Mesh.h"
 
-#include <string_view>
+#include <filesystem>
 #include <vector>
 
 namespace Okay
@@ -13,16 +13,13 @@ namespace Okay
 		ResourceManager() = default;
 		~ResourceManager() = default;
 
-		AssetID loadMesh(std::string_view path);
+		AssetID loadMesh(FilePath path);
 
 		template<typename Asset>
 		inline Asset& getAsset(AssetID id);
 
 		template<typename Asset>
 		inline const Asset& getAsset(AssetID id) const;
-
-		template<typename Asset>
-		inline AssetID getAssetID(std::string_view name);
 
 		template<typename Asset>
 		inline uint32_t getCount() const;
@@ -37,7 +34,7 @@ namespace Okay
 		template<typename Asset>
 		inline const std::vector<Asset>& getAssetsConst() const;
 
-		void importMeshData(std::string_view path, MeshData& outData);
+		void importMeshData(FilePath path, MeshData& outData);
 
 	private:
 		std::vector<Mesh> m_meshes;
@@ -68,25 +65,6 @@ namespace Okay
 
 		OKAY_ASSERT((uint32_t)id < (uint32_t)assets.size());
 		return assets[id];
-	}
-
-	template<typename Asset>
-	inline AssetID ResourceManager::getAssetID(std::string_view name)
-	{
-		STATIC_ASSERT_ASSET_TYPE();
-		std::vector<Asset>& assets = getAssets<Asset>();
-
-		for (uint32_t i = 0; i < (uint32_t)assets.size(); i++)
-		{
-			const Asset& asset = assets[i];
-
-			if (asset.getName() == name)
-			{
-				return AssetID(i);
-			}
-		}
-
-		return AssetID();
 	}
 
 	template<typename Asset>

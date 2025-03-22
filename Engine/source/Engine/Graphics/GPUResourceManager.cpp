@@ -1,10 +1,5 @@
 #include "GPUResourceManager.h"
 
-// Describes the "slots" of uint16_t used within a ResourceHandle
-// Currently assuming each part needs 16 bits
-constexpr uint8_t HANDLE_RESOURCE_IDX_SLOT = 0;
-constexpr uint8_t HANDLE_ALLOCATION_IDX_SLOT = 1;
-
 namespace Okay
 {
 	void GPUResourceManager::initialize(ID3D12Device* pDevice, CommandContext& commandContext)

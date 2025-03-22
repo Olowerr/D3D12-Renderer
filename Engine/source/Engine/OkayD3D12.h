@@ -8,8 +8,6 @@
 #include <d3dcompiler.h>
 #include <dxgi.h>
 
-#include <filesystem>
-
 // Always defined to check condition, TODO: Rename marco to like "OKAY_ALWAYS_ASSERT", or even better move this define to Okay.h and make OKAY_ASSERT use it
 #define OKAY_ASSERT2(condition)																	\
 	{																							\
@@ -26,6 +24,8 @@
 
 namespace Okay
 {
+	inline const FilePath SHADER_PATH = FilePath("..") / "Engine" / "resources" / "Shaders";
+
 	constexpr uint64_t alignAddress64(uint64_t adress, uint32_t alignment)
 	{
 		return ((adress - 1) - ((adress - 1) % alignment)) + alignment;
@@ -82,7 +82,7 @@ namespace Okay
 		printf("Shared System Memory: %.2f GB\n\n", adapterDesc.SharedSystemMemory / 1'000'000'000.f);
 	}
 
-	inline D3D12_SHADER_BYTECODE compileShader(std::filesystem::path path, std::string_view version, ID3DBlob** pShaderBlob)
+	inline D3D12_SHADER_BYTECODE compileShader(FilePath path, std::string_view version, ID3DBlob** pShaderBlob)
 	{
 		ID3DBlob* pErrorBlob = nullptr;
 

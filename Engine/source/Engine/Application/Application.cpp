@@ -21,6 +21,8 @@ namespace Okay
 
 	void Application::run()
 	{
+		m_renderer.preProcessResources(m_resourceManager);
+
 		Timer frameTimer;
 
 		while (m_window.isOpen())

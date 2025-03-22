@@ -10,14 +10,18 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 
 	m_scene.setActiveCamera(m_camEntity);
 
-	for (uint32_t i = 0; i < 3; i++)
+	AssetID cubeId = m_resourceManager.loadMesh(FilePath("resources") / "Meshes" / "Cube.fbx");
+
+	uint32_t numObjects = 3;
+	float spaceBetween = 2.f;
+	for (uint32_t i = 0; i < numObjects; i++)
 	{
 		Entity entity = m_scene.createEntity();
 
-		entity.getComponent<Transform>().position.x = (float)i - 3 * 0.5f + 0.5f;
+		entity.getComponent<Transform>().position.x = (float)i * spaceBetween - (numObjects - 1) * spaceBetween * 0.5f;
 		entity.getComponent<Transform>().rotation.y = i * 180.f;
 
-		entity.addComponent<MeshRenderer>();
+		entity.addComponent<MeshRenderer>().meshID = cubeId;
 	}
 }
 
@@ -33,5 +37,5 @@ void App::onUpdate(TimeStep dt)
 	camTransform.rotation.x = 20.f;
 	camTransform.rotation.y += 45.f * dt;
 
-	camTransform.position = camTransform.forwardVec() * -3.f;
+	camTransform.position = camTransform.forwardVec() * -6.f;
 }
