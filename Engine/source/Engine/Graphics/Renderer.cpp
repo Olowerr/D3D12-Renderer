@@ -46,6 +46,13 @@ namespace Okay
 		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, RESOURCE_PLACEMENT_ALIGNMENT);
 		m_renderData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPURenderData), 1, nullptr);
 		m_instancedObjectData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPUObjectData), 10, nullptr);
+
+		m_activeDrawGroups = 0;
+		m_drawGroups.resize(10);
+		for (DrawGroup& drawGroup : m_drawGroups)
+		{
+			drawGroup.entities.reserve(10);
+		}
 	}
 
 	void Renderer::shutdown()
@@ -154,43 +161,50 @@ namespace Okay
 		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
 
 		m_mainRenderPass.bind(pCommandList);
-
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderData));
 
+		// Render Objects
 
-		/*
-			When introducing draw groups, each group will have to call SetGraphicsRootShaderResourceView themselves,
-			where the virtualAddress is offseted to start at the first GPUObjectData for that group.
-			The virtualAddress does not need to be aligned to 256 (need to be aligned to 4 tho), all GPUObjectData's can be right after one another, even between drawGroups,
-			it just starts at where ever the virtualAddress refers to.
-		*/
-		pCommandList->SetGraphicsRootShaderResourceView(2, m_gpuResourceManager.getVirtualAddress(m_instancedObjectData));
+		assignObjectDrawGroups(scene);
 
 		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
-		uint32_t numMeshRenders = (uint32_t)meshRendererView.size_hint();
-	
+
+		// Temp, should resize, but removing resources from the HeapStore is not yet supported
+		OKAY_ASSERT(meshRendererView.size_hint() <= m_instancedObjectData.numElements);
+
 		unsigned char* pMappedPtr = (unsigned char*)m_gpuResourceManager.mapResource(m_instancedObjectData.resourceHandle);
 		pMappedPtr += m_instancedObjectData.resourceOffset;
 
-		// Temp
-		const DXMesh& cubeMesh = m_dxMeshes[0];
+		D3D12_GPU_VIRTUAL_ADDRESS drawGroupVrtaulAddress = m_gpuResourceManager.getVirtualAddress(m_instancedObjectData);
 
-		pCommandList->SetGraphicsRootShaderResourceView(1, cubeMesh.gpuVerticies);
-		pCommandList->IASetIndexBuffer(&cubeMesh.indiciesView);
-
-		for (entt::entity entity : meshRendererView)
+		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
 		{
-			auto [meshRenderer, transform] = meshRendererView[entity];
+			DrawGroup& drawGroup = m_drawGroups[i];
 
-			GPUObjectData* pObjectData = (GPUObjectData*)pMappedPtr;
-			pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
+			for (entt::entity entity : drawGroup.entities)
+			{
+				const Transform& transform = meshRendererView.get<Transform>(entity);
 
-			pMappedPtr += sizeof(GPUObjectData);
+				GPUObjectData* pObjectData = (GPUObjectData*)pMappedPtr;
+				pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
+
+				pMappedPtr += sizeof(GPUObjectData);
+			}
+
+			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroupVrtaulAddress);
+			drawGroupVrtaulAddress += drawGroup.entities.size() * sizeof(GPUObjectData);
+
+			const DXMesh& dxMesh = m_dxMeshes[drawGroup.dxMeshId];
+
+			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticies);
+			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
+
+			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
+
+			drawGroup.entities.clear();
 		}
 
 		m_gpuResourceManager.unmapResource(m_instancedObjectData.resourceHandle);
-
-		pCommandList->DrawIndexedInstanced(cubeMesh.numIndicies, meshRendererView.size_hint(), 0, 0, 0);
 	}
 
 	void Renderer::postRender()
@@ -202,6 +216,40 @@ namespace Okay
 
 		m_commandContext.wait();
 		m_commandContext.reset();
+	}
+
+	void Renderer::assignObjectDrawGroups(const Scene& scene)
+	{
+		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
+
+		m_activeDrawGroups = 0;
+		for (entt::entity entity : meshRendererView)
+		{
+			const MeshRenderer& meshRenderer = meshRendererView.get<MeshRenderer>(entity);
+
+			uint32_t drawGroupIdx = INVALID_UINT32;
+			for (uint32_t i = 0; i < m_activeDrawGroups; i++)
+			{
+				if (m_drawGroups[i].dxMeshId == meshRenderer.meshID)
+				{
+					drawGroupIdx = i;
+					break;
+				}
+			}
+
+			if (drawGroupIdx == INVALID_UINT32)
+			{
+				if (m_activeDrawGroups >= (uint32_t)m_drawGroups.size())
+				{
+					m_drawGroups.resize(m_drawGroups.size() + 20);
+				}
+
+				drawGroupIdx = m_activeDrawGroups++;
+				m_drawGroups[drawGroupIdx].dxMeshId = meshRenderer.meshID;
+			}
+
+			m_drawGroups[drawGroupIdx].entities.emplace_back(entity);
+		}
 	}
 
 	void Renderer::createDevice(IDXGIFactory* pFactory)

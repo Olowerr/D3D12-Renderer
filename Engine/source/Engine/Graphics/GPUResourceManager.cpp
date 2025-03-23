@@ -110,7 +110,7 @@ namespace Okay
 		else if (offset == OKAY_RESOURCE_APPEND)
 		{
 			offset = resource.nextAppendOffset;
-			OKAY_ASSERT(offset + elementSize * numElements <= resource.maxSize - resource.nextAppendOffset);
+			OKAY_ASSERT(offset + elementSize * numElements <= resource.maxSize);
 
 			resource.nextAppendOffset += alignAddress64(elementSize * numElements, BUFFER_DATA_ALIGNMENT);
 		}

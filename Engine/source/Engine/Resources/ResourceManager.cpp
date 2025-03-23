@@ -34,6 +34,7 @@ namespace Okay
 		OKAY_ASSERT(pAiScene->mMeshes[0]);
 
 		const aiMesh& aiMesh = *pAiScene->mMeshes[0];
+		bool hasUV = aiMesh.HasTextureCoords(0);
 
 		outData.verticies.resize(aiMesh.mNumVertices);
 		outData.indicies.resize(aiMesh.mNumFaces * 3u);
@@ -44,7 +45,7 @@ namespace Okay
 		{
 			outData.verticies[i].position = assimpToGlmVec3(aiMesh.mVertices[i]);
 			outData.verticies[i].normal = assimpToGlmVec3(aiMesh.mNormals[i]);
-			outData.verticies[i].uv = assimpToGlmVec3(aiMesh.mTextureCoords[0][i]);
+			outData.verticies[i].uv = hasUV ? assimpToGlmVec3(aiMesh.mTextureCoords[0][i]) : glm::vec2(0.f); 
 		}
 
 		for (uint32_t i = 0; i < aiMesh.mNumFaces; i++)

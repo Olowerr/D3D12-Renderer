@@ -10,9 +10,19 @@ namespace Okay
 
 	struct DXMesh
 	{
+		DXMesh() = default;
+
 		D3D12_GPU_VIRTUAL_ADDRESS gpuVerticies = {};
 		D3D12_INDEX_BUFFER_VIEW indiciesView = {};
 		uint32_t numIndicies = INVALID_UINT32;
+	};
+
+	struct DrawGroup
+	{
+		DrawGroup() = default;
+
+		uint32_t dxMeshId = INVALID_UINT32;
+		std::vector<entt::entity> entities;
 	};
 
 	class Renderer
@@ -37,8 +47,7 @@ namespace Okay
 		void renderScene(const Scene& scene);
 		void postRender();
 
-		void enableDebugLayer();
-		void enableGPUBasedValidation();
+		void assignObjectDrawGroups(const Scene& scene);
 
 		void createDevice(IDXGIFactory* pFactory);
 
@@ -46,6 +55,9 @@ namespace Okay
 		void fetchBackBuffersAndDSV();
 
 		void createMainRenderPass();
+
+		void enableDebugLayer();
+		void enableGPUBasedValidation();
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
@@ -74,5 +86,9 @@ namespace Okay
 		RenderPass m_mainRenderPass;
 
 		std::vector<DXMesh> m_dxMeshes;
+
+		// Keep track manually because we don't wanna call clear() cuz it deallocates the std::vectors inside the DrawGroups
+		uint32_t m_activeDrawGroups = INVALID_UINT32;
+		std::vector<DrawGroup> m_drawGroups;
 	};
 }
