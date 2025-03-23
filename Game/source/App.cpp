@@ -19,7 +19,7 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 
 	for (uint32_t i = 0; i < 3; i++)
 	{
-		for (uint32_t k = 0; k < 4; k++)
+		for (uint32_t k = 0; k < 3; k++)
 		{
 			Entity entity = m_scene.createEntity();
 
