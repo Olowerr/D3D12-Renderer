@@ -4,19 +4,31 @@
 
 #include <vector>
 
+#define OKAY_DESCRIPTOR_APPEND INVALID_UINT32
+
 namespace Okay
 {
-	typedef uint32_t DescriptorHandle;
-	constexpr DescriptorHandle INVALID_DH = INVALID_UINT32;
+	typedef uint16_t DescriptorHeapHandle;
+
+	constexpr DescriptorHeapHandle INVALID_DHH = INVALID_UINT16;
 
 	struct DescriptorHeap
 	{
 		ID3D12DescriptorHeap* pDXDescriptorHeap = nullptr;
 		D3D12_DESCRIPTOR_HEAP_TYPE type = D3D12_DESCRIPTOR_HEAP_TYPE_NUM_TYPES;
+
+		uint32_t maxDescriptors = INVALID_UINT16;
+		uint32_t nextAppendSlot = INVALID_UINT16;
+
 		uint32_t incrementSize = INVALID_UINT32;
 
-		uint16_t usedDescriptorSlots = INVALID_UINT16;
-		uint16_t maxDescriptors = INVALID_UINT16;
+		bool committed = false;
+	};
+
+	struct Descriptor
+	{
+		DescriptorHeapHandle heapHandle = INVALID_DHH;
+		uint32_t heapSlot = INVALID_UINT32;
 	};
 
 	class DescriptorHeapStore
@@ -25,27 +37,29 @@ namespace Okay
 		DescriptorHeapStore() = default;
 		virtual ~DescriptorHeapStore() = default;
 
-		void initialize(ID3D12Device* pDevice, uint16_t numSlots);
+		void initialize(ID3D12Device* pDevice, uint32_t committedHeapStdSize);
 		void shutdown();
 
-		// TODO: Rename to like 'createConsecutiveDescripotrs' & add function 'createDescriptor' to create single descriptor
-		DescriptorHandle createDescriptors(uint32_t numDescriptors, const DescriptorDesc* pDescs, D3D12_DESCRIPTOR_HEAP_TYPE type);
+		DescriptorHeapHandle createDescriptorHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type);
+		Descriptor allocateDescriptors(DescriptorHeapHandle heapHandle, uint32_t slotOffset, const DescriptorDesc* pDescs, uint32_t numDescriptors);
 
-		D3D12_CPU_DESCRIPTOR_HANDLE getCPUHandle(DescriptorHandle handle);
-		D3D12_GPU_DESCRIPTOR_HANDLE getGPUHandle(DescriptorHandle handle);
+		Descriptor allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE type, const DescriptorDesc* pDescs, uint32_t numDescriptors);
+
+		ID3D12DescriptorHeap* getDXDescriptorHeap(DescriptorHeapHandle heapHandle);
+
+		D3D12_CPU_DESCRIPTOR_HANDLE getCPUHandle(const Descriptor& descriptor);
+		D3D12_GPU_DESCRIPTOR_HANDLE getGPUHandle(const Descriptor& descriptor);
 
 	private:
-		uint16_t getSufficientDescriptorHeap(uint16_t slots, D3D12_DESCRIPTOR_HEAP_TYPE type);
-		uint16_t createNewDescriptorHeap(uint16_t slots, D3D12_DESCRIPTOR_HEAP_TYPE type);
+		DescriptorHeapHandle findSufficentCommittedHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type);
+		DescriptorHeapHandle createDescriptorHeap_Internal(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type, bool committed);
 
-		DescriptorHandle encodeHandle(uint16_t heapindex, uint16_t descriptorIndex);
-		void decodeHandle(DescriptorHandle handle, DescriptorHeap** ppOutDescriptorHeap, uint16_t* pOutDescriptorIndex);
-		void validateDecodedHandle(uint16_t heapIndex, uint16_t descriptorIndex);
+		void validateDescriptorHeapHandle(DescriptorHeapHandle handle);
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
 
 		std::vector<DescriptorHeap> m_descriptorHeaps;
-		uint16_t m_creationSlots = INVALID_UINT16;
+		uint32_t m_committedHeapStdSize = INVALID_UINT32;
 	};
 }

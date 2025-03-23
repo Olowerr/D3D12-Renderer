@@ -65,8 +65,8 @@ namespace Okay
 
 		ID3D12Resource* m_backBuffers[NUM_BACKBUFFERS] = {};
 		uint8_t m_currentBackBuffer = NUM_BACKBUFFERS - 1;
-		DescriptorHandle m_rtvFirstDescriptor = INVALID_UINT32;
-		DescriptorHandle m_dsvDescriptor = INVALID_UINT32;
+		Descriptor m_rtvFirstDescriptor;
+		Descriptor m_dsvDescriptor;
 
 		D3D12_VIEWPORT m_viewport = {};
 		D3D12_RECT m_scissorRect = {};

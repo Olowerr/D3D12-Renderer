@@ -111,9 +111,9 @@ namespace Okay
 		{
 			offset = resource.nextAppendOffset;
 			OKAY_ASSERT(offset + elementSize * numElements <= resource.maxSize);
-
-			resource.nextAppendOffset += alignAddress64(elementSize * numElements, BUFFER_DATA_ALIGNMENT);
 		}
+
+		resource.nextAppendOffset += alignAddress64(elementSize * numElements, BUFFER_DATA_ALIGNMENT);
 
 		Allocation allocation = {};
 		allocation.resourceHandle = handle;

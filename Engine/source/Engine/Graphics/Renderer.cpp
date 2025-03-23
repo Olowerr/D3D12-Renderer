@@ -33,7 +33,7 @@ namespace Okay
 		createSwapChain(pFactory, window);
 
 		m_gpuResourceManager.initialize(m_pDevice, m_commandContext);
-		m_descriptorHeapStore.initialize(m_pDevice, 10);
+		m_descriptorHeapStore.initialize(m_pDevice, 50);
 
 		fetchBackBuffersAndDSV();
 
@@ -45,13 +45,13 @@ namespace Okay
 
 		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, RESOURCE_PLACEMENT_ALIGNMENT);
 		m_renderData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPURenderData), 1, nullptr);
-		m_instancedObjectData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPUObjectData), 10, nullptr);
+		m_instancedObjectData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPUObjectData), 50, nullptr);
 
 		m_activeDrawGroups = 0;
-		m_drawGroups.resize(10);
+		m_drawGroups.resize(50);
 		for (DrawGroup& drawGroup : m_drawGroups)
 		{
-			drawGroup.entities.reserve(10);
+			drawGroup.entities.reserve(50);
 		}
 	}
 
@@ -313,14 +313,14 @@ namespace Okay
 			backBufferRTVs[i].pDXResource = m_backBuffers[i];
 		}
 
-		m_rtvFirstDescriptor = m_descriptorHeapStore.createDescriptors(NUM_BACKBUFFERS, backBufferRTVs, D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		m_rtvFirstDescriptor = m_descriptorHeapStore.allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, backBufferRTVs, NUM_BACKBUFFERS);
 
 		// Create depth stencil texture & descriptor
 		D3D12_RESOURCE_DESC resourceDesc = m_backBuffers[0]->GetDesc();
 		Allocation dsAllocation = m_gpuResourceManager.createTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
 
 		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsAllocation, OKAY_DESCRIPTOR_TYPE_DSV, true);
-		m_dsvDescriptor = m_descriptorHeapStore.createDescriptors(1, &dsvDesc, D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+		m_dsvDescriptor = m_descriptorHeapStore.allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, &dsvDesc, 1);
 
 		ID3D12Resource* pDsvResource = m_gpuResourceManager.getDXResource(dsAllocation.resourceHandle);
 		m_commandContext.transitionResource(pDsvResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_DEPTH_WRITE);
@@ -356,7 +356,7 @@ namespace Okay
 		rootParams[1].Descriptor.ShaderRegister = 0;
 		rootParams[1].Descriptor.RegisterSpace = 0;
 		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-		
+
 		// Object datas (GPUObjcetData)
 		rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
 		rootParams[2].Descriptor.ShaderRegister = 1;
