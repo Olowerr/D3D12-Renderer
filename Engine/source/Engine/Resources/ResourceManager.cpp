@@ -4,6 +4,9 @@
 #include "assimp/postprocess.h"
 #include "assimp/scene.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb/stb_image.h"
+
 namespace Okay
 {
 	static glm::vec3 assimpToGlmVec3(const aiVector3D& vector)
@@ -21,6 +24,33 @@ namespace Okay
 		m_meshes.emplace_back(meshData);
 
 		return id;
+	}
+
+	AssetID ResourceManager::loadTexture(FilePath path)
+	{
+		AssetID id = (AssetID)m_textures.size();
+
+		int width = 0, height = 0;
+		unsigned char* pData = stbi_load(path.string().c_str(), &width, &height, nullptr, STBI_rgb_alpha);
+
+		Texture& texture = m_textures.emplace_back();
+		texture.setTextureData(pData, (uint32_t)width, (uint32_t)height);
+
+		return id;
+	}
+
+	void ResourceManager::unloadCPUData()
+	{
+		for (Mesh& mesh : m_meshes)
+		{
+			mesh.clearData();
+		}
+
+		for (Texture& texture : m_textures)
+		{
+			stbi_image_free(texture.getTextureData());
+			texture.setTextureData(nullptr, 0, 0);
+		}
 	}
 
 	void ResourceManager::importMeshData(FilePath path, MeshData& outData)

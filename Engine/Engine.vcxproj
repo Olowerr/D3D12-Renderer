@@ -29,6 +29,7 @@
     <ClInclude Include="source\Engine\OkayD3D12.h" />
     <ClInclude Include="source\Engine\Resources\Mesh.h" />
     <ClInclude Include="source\Engine\Resources\ResourceManager.h" />
+    <ClInclude Include="source\Engine\Resources\Texture.h" />
     <ClInclude Include="source\Engine\Scene\Components.h" />
     <ClInclude Include="source\Engine\Scene\Entity.h" />
     <ClInclude Include="source\Engine\Scene\Scene.h" />

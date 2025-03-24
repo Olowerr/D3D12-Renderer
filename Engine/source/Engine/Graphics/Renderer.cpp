@@ -82,41 +82,8 @@ namespace Okay
 
 	void Renderer::preProcessResources(const ResourceManager& resourceManager)
 	{
-		const std::vector<Mesh>& meshes = resourceManager.getAll<Mesh>();
-
-		uint64_t verticiesResourceSize = 0;
-		uint64_t indiciesResourceSize = 0;
-
-		for (const Mesh& mesh : meshes)
-		{
-			const MeshData& meshData = mesh.getMeshData();
-			verticiesResourceSize += alignAddress64(meshData.verticies.size() * sizeof(Vertex), BUFFER_DATA_ALIGNMENT);
-			indiciesResourceSize += alignAddress64(meshData.indicies.size() * sizeof(uint32_t), BUFFER_DATA_ALIGNMENT);
-		}
-
-		ResourceHandle verticiesRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, verticiesResourceSize);
-		ResourceHandle indiciesRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, indiciesResourceSize);
-
-		m_dxMeshes.resize(meshes.size());
-
-		for (uint32_t i = 0; i < (uint32_t)meshes.size(); i++)
-		{
-			const std::vector<Vertex>& verticies = meshes[i].getMeshData().verticies;
-			const std::vector<uint32_t>& indicies = meshes[i].getMeshData().indicies;
-
-			Allocation verticiesAlloc = m_gpuResourceManager.allocateInto(verticiesRH, OKAY_RESOURCE_APPEND, sizeof(Vertex), (uint32_t)verticies.size(), verticies.data());
-			Allocation indiciesAlloc = m_gpuResourceManager.allocateInto(indiciesRH, OKAY_RESOURCE_APPEND, sizeof(uint32_t), (uint32_t)indicies.size(), indicies.data());
-
-			m_dxMeshes[i].gpuVerticies = m_gpuResourceManager.getVirtualAddress(verticiesAlloc);
-
-			m_dxMeshes[i].indiciesView.BufferLocation = m_gpuResourceManager.getVirtualAddress(indiciesAlloc);
-			m_dxMeshes[i].indiciesView.SizeInBytes = (uint32_t)indiciesAlloc.elementSize * indiciesAlloc.numElements;
-			m_dxMeshes[i].indiciesView.Format = DXGI_FORMAT_R32_UINT;
-
-			m_dxMeshes[i].numIndicies = (uint32_t)indicies.size();
-		}
-
-		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(indiciesRH), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+		preProcessMeshes(resourceManager.getAll<Mesh>());
+		preProcessTextures(resourceManager.getAll<Texture>());
 	}
 
 	void Renderer::updateBuffers(const Scene& scene)
@@ -161,7 +128,12 @@ namespace Okay
 		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
 
 		m_mainRenderPass.bind(pCommandList);
+
+		ID3D12DescriptorHeap* pDXHeap = m_descriptorHeapStore.getDXDescriptorHeap(m_materialTexturesDHH);
+		pCommandList->SetDescriptorHeaps(1, &pDXHeap);
+
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderData));
+		pCommandList->SetGraphicsRootDescriptorTable(3, m_descriptorHeapStore.getGPUHandle(m_textureDescriptor));
 
 		// Render Objects
 
@@ -343,7 +315,7 @@ namespace Okay
 
 	void Renderer::createMainRenderPass()
 	{
-		D3D12_ROOT_PARAMETER rootParams[3] = {};
+		D3D12_ROOT_PARAMETER rootParams[4] = {};
 
 		// Main Render Data (GPURenderData)
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -362,14 +334,29 @@ namespace Okay
 		rootParams[2].Descriptor.ShaderRegister = 1;
 		rootParams[2].Descriptor.RegisterSpace = 0;
 		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		
+		// Testing texture
+		D3D12_DESCRIPTOR_RANGE range = {};
+		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		range.NumDescriptors = 1;
+		range.BaseShaderRegister = 2;
+		range.RegisterSpace = 0;
+		range.OffsetInDescriptorsFromTableStart = 0;
+		rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParams[3].DescriptorTable.NumDescriptorRanges = 1;
+		rootParams[3].DescriptorTable.pDescriptorRanges = &range;
+		rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+
+		D3D12_STATIC_SAMPLER_DESC defaultPointSampler = createDefaultStaticPointSamplerDesc();
 
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
 		rootSignatureDesc.NumParameters = _countof(rootParams);
 		rootSignatureDesc.pParameters = rootParams;
 
-		rootSignatureDesc.NumStaticSamplers = 0;
-		rootSignatureDesc.pStaticSamplers = nullptr;
+		rootSignatureDesc.NumStaticSamplers = 1;
+		rootSignatureDesc.pStaticSamplers = &defaultPointSampler;
 
 
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = createDefaultGraphicsPipelineStateDesc();
@@ -388,6 +375,64 @@ namespace Okay
 
 		D3D12_RELEASE(pVSBlob);
 		D3D12_RELEASE(pPSBlob);
+	}
+
+	void Renderer::preProcessMeshes(const std::vector<Mesh>& meshes)
+	{
+		uint64_t verticiesResourceSize = 0;
+		uint64_t indiciesResourceSize = 0;
+
+		for (const Mesh& mesh : meshes)
+		{
+			const MeshData& meshData = mesh.getMeshData();
+			verticiesResourceSize += alignAddress64(meshData.verticies.size() * sizeof(Vertex), BUFFER_DATA_ALIGNMENT);
+			indiciesResourceSize += alignAddress64(meshData.indicies.size() * sizeof(uint32_t), BUFFER_DATA_ALIGNMENT);
+		}
+
+		ResourceHandle verticiesRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, verticiesResourceSize);
+		ResourceHandle indiciesRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, indiciesResourceSize);
+
+		m_dxMeshes.resize(meshes.size());
+
+		for (uint32_t i = 0; i < (uint32_t)meshes.size(); i++)
+		{
+			const std::vector<Vertex>& verticies = meshes[i].getMeshData().verticies;
+			const std::vector<uint32_t>& indicies = meshes[i].getMeshData().indicies;
+
+			Allocation verticiesAlloc = m_gpuResourceManager.allocateInto(verticiesRH, OKAY_RESOURCE_APPEND, sizeof(Vertex), (uint32_t)verticies.size(), verticies.data());
+			Allocation indiciesAlloc = m_gpuResourceManager.allocateInto(indiciesRH, OKAY_RESOURCE_APPEND, sizeof(uint32_t), (uint32_t)indicies.size(), indicies.data());
+
+			m_dxMeshes[i].gpuVerticies = m_gpuResourceManager.getVirtualAddress(verticiesAlloc);
+
+			m_dxMeshes[i].indiciesView.BufferLocation = m_gpuResourceManager.getVirtualAddress(indiciesAlloc);
+			m_dxMeshes[i].indiciesView.SizeInBytes = (uint32_t)indiciesAlloc.elementSize * indiciesAlloc.numElements;
+			m_dxMeshes[i].indiciesView.Format = DXGI_FORMAT_R32_UINT;
+
+			m_dxMeshes[i].numIndicies = (uint32_t)indicies.size();
+		}
+
+		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(indiciesRH), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+	}
+
+	void Renderer::preProcessTextures(const std::vector<Texture>& textures)
+	{
+		m_materialTexturesDHH = m_descriptorHeapStore.createDescriptorHeap(50, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		const Texture& texture = textures[0];
+
+		/*
+			generate mips inside createTexture ? or maybe new function in GPUResourceManager ? : spinthink :
+			if it's part of createTexture() then it'll be required that data is sent in too
+
+			actually createTexture() has to know the number of mips since it's required for resource creation
+			so i guess we just put it in there? makes sense tbh
+		*/
+
+		Allocation textureAlloc = m_gpuResourceManager.createTexture(texture.getWidth(), texture.getHeight(),
+			DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, texture.getTextureData());
+
+		DescriptorDesc desc = m_gpuResourceManager.createDescriptorDesc(textureAlloc, OKAY_DESCRIPTOR_TYPE_SRV, true);
+		m_textureDescriptor = m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, OKAY_DESCRIPTOR_APPEND, &desc, 1);
 	}
 
 	void Renderer::enableDebugLayer()

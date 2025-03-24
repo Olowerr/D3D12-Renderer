@@ -50,7 +50,7 @@ namespace Okay
 		*/
 		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &resourceDesc);
 
-		D3D12_RESOURCE_STATES initialState = heapType == D3D12_HEAP_TYPE_DEFAULT ? D3D12_RESOURCE_STATE_COPY_DEST : D3D12_RESOURCE_STATE_GENERIC_READ;
+		D3D12_RESOURCE_STATES initialState = heapType == D3D12_HEAP_TYPE_DEFAULT ? D3D12_RESOURCE_STATE_COMMON : D3D12_RESOURCE_STATE_GENERIC_READ;
 		Heap& heap = getSufficientHeap(heapType, resourceAllocationInfo.SizeInBytes);
 
 		ID3D12Resource* pResource = nullptr;

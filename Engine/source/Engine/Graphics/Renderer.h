@@ -7,6 +7,8 @@
 namespace Okay
 {
 	class ResourceManager;
+	class Mesh;
+	class Texture;
 
 	struct DXMesh
 	{
@@ -56,6 +58,9 @@ namespace Okay
 
 		void createMainRenderPass();
 
+		void preProcessMeshes(const std::vector<Mesh>& meshes);
+		void preProcessTextures(const std::vector<Texture>& textures);
+
 		void enableDebugLayer();
 		void enableGPUBasedValidation();
 
@@ -90,5 +95,9 @@ namespace Okay
 		// Keep track manually because we don't wanna call clear() cuz it deallocates the std::vectors inside the DrawGroups
 		uint32_t m_activeDrawGroups = INVALID_UINT32;
 		std::vector<DrawGroup> m_drawGroups;
+
+	private: // temp
+		DescriptorHeapHandle m_materialTexturesDHH = INVALID_DHH;
+		Descriptor m_textureDescriptor;
 	};
 }

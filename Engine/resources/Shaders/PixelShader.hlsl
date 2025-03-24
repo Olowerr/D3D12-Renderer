@@ -1,6 +1,5 @@
 
 // Structs
-
 struct InputData
 {
     float4 svPosition : SV_POSITION;
@@ -16,7 +15,6 @@ struct ObjectData
 
 
 // CBuffers
-
 cbuffer RenderDataCBuffer : register(b0, space0)
 {
     float4x4 viewProjMatrix;
@@ -27,12 +25,19 @@ cbuffer RenderDataCBuffer : register(b0, space0)
 }
 
 
-// SRVs
-
+// Structured Buffers
 StructuredBuffer<ObjectData> objectDatas : register(t1, space0);
+
+
+// Textures
+Texture2D<unorm float4> testTexture : register(t2, space0);
+
+
+// Samplers
+SamplerState pointSampler : register(s0, space0);
 
 
 float4 main(InputData input) : SV_TARGET
 {
-    return float4(input.worldNormal, 1.f);
+    return float4(testTexture.Sample(pointSampler, input.uv).rgb, 1.f);
 }

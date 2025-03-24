@@ -1,6 +1,5 @@
 
 // Structs
-
 struct InputVertex
 {
 	float3 position;
@@ -23,7 +22,6 @@ struct ObjectData
 
 
 // CBuffers
-
 cbuffer RenderDataCBuffer : register(b0, space0)
 {
 	float4x4 viewProjMatrix;
@@ -34,8 +32,7 @@ cbuffer RenderDataCBuffer : register(b0, space0)
 }
 
 
-// SRVs
-
+// Structured Buffers
 StructuredBuffer<InputVertex> verticies : register(t0, space0);
 StructuredBuffer<ObjectData> objectDatas : register(t1, space0);
 

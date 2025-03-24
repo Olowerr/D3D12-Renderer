@@ -70,6 +70,11 @@ namespace Okay
 		if (pData)
 		{
 			updateTexture(resource.pDXResource, (unsigned char*)pData);
+
+			if (flags & OKAY_TEXTURE_FLAG_SHADER_READ)
+			{
+				m_pCommandContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+			}
 		}
 
 		Allocation allocation = {};
@@ -266,6 +271,8 @@ namespace Okay
 				1. Create new upload heap
 				2. CPU copy texture data into upload heap
 				3. Copy upload heap to target resource
+				4. Flush command queue
+				5. Release upload heap
 
 			Can create the upload heap at initialization, but it might not be used a lot after initialization
 			and might need to resize
@@ -278,10 +285,8 @@ namespace Okay
 
 		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footPrint{};
 		uint64_t rowSizeInBytes = 0;
-		uint64_t resourceTotalSize = 0;
 
-
-		m_pDevice->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footPrint, nullptr, &rowSizeInBytes, &resourceTotalSize);
+		m_pDevice->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footPrint, nullptr, &rowSizeInBytes, nullptr);
 
 		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &textureDesc);
 		ID3D12Resource* pUploadResource = nullptr;
@@ -294,7 +299,7 @@ namespace Okay
 
 		for (uint32_t i = 0; i < textureDesc.Height; i++)
 		{
-			memcpy(pMappedData + i * rowSizeInBytes, pData + i * textureDesc.Width * 4, textureDesc.Width * 4);
+			memcpy(pMappedData + i * footPrint.Footprint.RowPitch, pData + i * rowSizeInBytes, rowSizeInBytes);
 		}
 
 		pUploadResource->Unmap(0, nullptr);

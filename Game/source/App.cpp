@@ -29,6 +29,8 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 			entity.addComponent<MeshRenderer>().meshID = i;
 		}
 	}
+
+	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "quack.jpg");
 }
 
 App::~App()

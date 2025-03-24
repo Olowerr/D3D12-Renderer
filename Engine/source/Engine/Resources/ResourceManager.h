@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Mesh.h"
+#include "Texture.h"
 
 #include <filesystem>
 #include <vector>
@@ -14,6 +15,9 @@ namespace Okay
 		~ResourceManager() = default;
 
 		AssetID loadMesh(FilePath path);
+		AssetID loadTexture(FilePath path);
+
+		void unloadCPUData();
 
 		template<typename Asset>
 		inline Asset& getAsset(AssetID id);
@@ -38,11 +42,16 @@ namespace Okay
 
 	private:
 		std::vector<Mesh> m_meshes;
+		std::vector<Texture> m_textures;
 
 	};
 
 
-	#define STATIC_ASSERT_ASSET_TYPE() static_assert(std::is_same<Asset, Mesh>(), "Invalid Asset type")				
+	#define STATIC_ASSERT_ASSET_TYPE()		\
+		static_assert(						\
+			std::is_same<Asset, Mesh>()	||	\
+			std::is_same<Asset, Texture>(),	\
+			"Invalid Asset type")
 
 	// Public:
 	template<typename Asset>
@@ -89,7 +98,14 @@ namespace Okay
 		STATIC_ASSERT_ASSET_TYPE();
 
 		if constexpr (std::is_same<Asset, Mesh>())
+		{
 			return m_meshes;
+		}
+
+		if constexpr (std::is_same<Asset, Texture>())
+		{
+			return m_textures;
+		}
 	}
 
 	template<typename Asset>

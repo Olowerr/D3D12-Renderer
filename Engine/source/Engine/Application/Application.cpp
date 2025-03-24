@@ -22,6 +22,7 @@ namespace Okay
 	void Application::run()
 	{
 		m_renderer.preProcessResources(m_resourceManager);
+		m_resourceManager.unloadCPUData();
 
 		Timer frameTimer;
 
