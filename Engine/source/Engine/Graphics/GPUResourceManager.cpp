@@ -2,16 +2,13 @@
 
 namespace Okay
 {
-	void GPUResourceManager::initialize(ID3D12Device* pDevice, CommandContext& commandContext)
+	void GPUResourceManager::initialize(ID3D12Device* pDevice, CommandContext& commandContext, RingBuffer& ringBuffer)
 	{
 		m_pDevice = pDevice;
 		m_pCommandContext = &commandContext;
+		m_pRingBuffer = &ringBuffer;
 
 		m_heapStore.initialize(m_pDevice, 100'000'000, 1'000'000);
-
-		createUploadResource(&m_pUploadBuffer, RESOURCE_PLACEMENT_ALIGNMENT);
-		m_uploadHeapCurrentSize = 0;
-		m_uploadHeapMaxSize = RESOURCE_PLACEMENT_ALIGNMENT;
 	}
 
 	void GPUResourceManager::shutdown()
@@ -22,8 +19,6 @@ namespace Okay
 		m_resources.clear();
 
 		m_heapStore.shutdown();
-
-		D3D12_RELEASE(m_pUploadBuffer);
 
 		m_pDevice = nullptr;
 	}
@@ -227,24 +222,12 @@ namespace Okay
 
 	void GPUResourceManager::updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData)
 	{
-		if (m_uploadHeapCurrentSize + byteSize > m_uploadHeapMaxSize)
-		{
-			resizeUploadBuffer(uint64_t((m_uploadHeapCurrentSize + byteSize) * 1.2f));
-		}
+		uint64_t ringBufferOffset = m_pRingBuffer->getOffset();
 
-		D3D12_RANGE readRange = { 0, 0 };
-
-		unsigned char* pMappedData = nullptr;
-		DX_CHECK(m_pUploadBuffer->Map(0, &readRange, (void**)&pMappedData));
-
-		memcpy(pMappedData + m_uploadHeapCurrentSize, pData, byteSize);
-
-		m_pUploadBuffer->Unmap(0, nullptr);
+		m_pRingBuffer->allocate(pData, byteSize);
 
 		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
-		pCommandList->CopyBufferRegion(pDXResource, resourceOffset, m_pUploadBuffer, m_uploadHeapCurrentSize, byteSize);
-		
-		m_uploadHeapCurrentSize = alignAddress64(m_uploadHeapCurrentSize + (uint64_t)byteSize, BUFFER_DATA_ALIGNMENT);
+		pCommandList->CopyBufferRegion(pDXResource, resourceOffset, m_pRingBuffer->getDXResource(), ringBufferOffset, byteSize);
 	}
 
 	void GPUResourceManager::updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData)
@@ -284,20 +267,18 @@ namespace Okay
 		m_pDevice->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footPrint, nullptr, &rowSizeInBytes, &resourceTotalSize);
 
 		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &textureDesc);
-		ID3D12Resource* pUploadResource = nullptr;
-		createUploadResource(&pUploadResource, resourceAllocationInfo.SizeInBytes);
 
-		D3D12_RANGE range = { 0, 0 };
+		RingBuffer textureUploadBuffer;
+		textureUploadBuffer.initialize(m_pDevice, resourceAllocationInfo.SizeInBytes);
 
-		unsigned char* pMappedData = nullptr;
-		pUploadResource->Map(0, &range, (void**)&pMappedData);
+		uint8_t* pMappedData = textureUploadBuffer.map();
 
 		for (uint32_t i = 0; i < textureDesc.Height; i++)
 		{
 			memcpy(pMappedData + i * rowSizeInBytes, pData + i * textureDesc.Width * 4, textureDesc.Width * 4);
 		}
 
-		pUploadResource->Unmap(0, nullptr);
+		textureUploadBuffer.unmap((uint64_t)textureDesc.Height * footPrint.Footprint.RowPitch);
 
 		D3D12_TEXTURE_COPY_LOCATION copyDst{};
 		copyDst.pResource = pDXResource;
@@ -305,7 +286,7 @@ namespace Okay
 		copyDst.SubresourceIndex = 0;
 
 		D3D12_TEXTURE_COPY_LOCATION copySrc{};
-		copySrc.pResource = pUploadResource;
+		copySrc.pResource = textureUploadBuffer.getDXResource();
 		copySrc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
 		copySrc.PlacedFootprint = footPrint;
 		copySrc.PlacedFootprint.Offset = 0;
@@ -315,47 +296,11 @@ namespace Okay
 
 		m_pCommandContext->flush();
 
-		D3D12_RELEASE(pUploadResource);
+		textureUploadBuffer.shutdown();
 	}
 
 	void GPUResourceManager::validateResourceHandle(ResourceHandle handle)
 	{
 		OKAY_ASSERT(handle < (ResourceHandle)m_resources.size());
-	}
-
-	void GPUResourceManager::createUploadResource(ID3D12Resource** ppDXResource, uint64_t byteSize)
-	{
-		D3D12_RESOURCE_DESC uploadDesc{};
-		uploadDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-		uploadDesc.Alignment = RESOURCE_PLACEMENT_ALIGNMENT;
-		uploadDesc.Width = byteSize;
-		uploadDesc.Height = 1;
-		uploadDesc.DepthOrArraySize = 1;
-		uploadDesc.MipLevels = 1;
-		uploadDesc.Format = DXGI_FORMAT_UNKNOWN;
-		uploadDesc.SampleDesc.Count = 1;
-		uploadDesc.SampleDesc.Quality = 0;
-		uploadDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-		uploadDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-		D3D12_HEAP_PROPERTIES heapProperties{};
-		heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
-		heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-		heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-		heapProperties.CreationNodeMask = 0;
-		heapProperties.VisibleNodeMask = 0;
-
-		DX_CHECK(m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &uploadDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(ppDXResource)));
-	}
-
-	void GPUResourceManager::resizeUploadBuffer(uint64_t newSize)
-	{
-		m_pCommandContext->flush();
-
-		D3D12_RELEASE(m_pUploadBuffer);
-
-		createUploadResource(&m_pUploadBuffer, newSize);
-		m_uploadHeapCurrentSize = 0;
-		m_uploadHeapMaxSize = newSize;
 	}
 }
