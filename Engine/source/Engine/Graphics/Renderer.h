@@ -3,6 +3,7 @@
 #include "Engine/Application/Window.h"
 #include "Engine/Scene/Scene.h"
 #include "RenderPass.h"
+#include "RingBuffer.h"
 
 namespace Okay
 {
@@ -80,14 +81,14 @@ namespace Okay
 		CommandContext m_commandContext;
 		GPUResourceManager m_gpuResourceManager;
 		DescriptorHeapStore m_descriptorHeapStore;
+		RingBuffer m_ringBuffer;
 
 		uint32_t m_cbvSrvUavDescriptorSize = INVALID_UINT32;
 		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
 		uint32_t m_dsvDescriptorSize = INVALID_UINT32;
 
 	private:
-		Allocation m_renderData;
-		Allocation m_instancedObjectData;
+		D3D12_GPU_VIRTUAL_ADDRESS m_renderData;
 		RenderPass m_mainRenderPass;
 
 		std::vector<DXMesh> m_dxMeshes;

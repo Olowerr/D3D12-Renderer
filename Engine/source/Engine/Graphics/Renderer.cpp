@@ -32,7 +32,9 @@ namespace Okay
 
 		createSwapChain(pFactory, window);
 
-		m_gpuResourceManager.initialize(m_pDevice, m_commandContext);
+		m_ringBuffer.initialize(m_pDevice, 10'000'000);
+
+		m_gpuResourceManager.initialize(m_pDevice, m_commandContext, m_ringBuffer);
 		m_descriptorHeapStore.initialize(m_pDevice, 50);
 
 		fetchBackBuffersAndDSV();
@@ -42,10 +44,6 @@ namespace Okay
 		m_dsvDescriptorSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
 		createMainRenderPass();
-
-		ResourceHandle renderDataResource = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_UPLOAD, RESOURCE_PLACEMENT_ALIGNMENT);
-		m_renderData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPURenderData), 1, nullptr);
-		m_instancedObjectData = m_gpuResourceManager.allocateInto(renderDataResource, OKAY_RESOURCE_APPEND, sizeof(GPUObjectData), 50, nullptr);
 
 		m_activeDrawGroups = 0;
 		m_drawGroups.resize(50);
@@ -59,6 +57,8 @@ namespace Okay
 	{
 		m_commandContext.shutdown();
 		m_gpuResourceManager.shutdown();
+
+		m_ringBuffer.shutdown();
 
 		m_descriptorHeapStore.shutdown();
 
@@ -97,7 +97,7 @@ namespace Okay
 		renderData.cameraDir = camTransform.forwardVec();
 		renderData.viewProjMatrix = glm::transpose(cameraComp.getProjectionMatrix(m_viewport.Width, m_viewport.Height) * camTransform.getViewMatrix());
 
-		m_gpuResourceManager.updateBuffer(m_renderData, &renderData);
+		m_renderData = m_ringBuffer.allocate(&renderData, sizeof(GPURenderData));
 	}
 
 	void Renderer::preRender()
@@ -129,26 +129,21 @@ namespace Okay
 
 		m_mainRenderPass.bind(pCommandList);
 
-		ID3D12DescriptorHeap* pDXHeap = m_descriptorHeapStore.getDXDescriptorHeap(m_materialTexturesDHH);
-		pCommandList->SetDescriptorHeaps(1, &pDXHeap);
+		ID3D12DescriptorHeap* pMaterialDXDescHeap = m_descriptorHeapStore.getDXDescriptorHeap(m_materialTexturesDHH);
+		pCommandList->SetDescriptorHeaps(1, &pMaterialDXDescHeap);
 
-		pCommandList->SetGraphicsRootConstantBufferView(0, m_gpuResourceManager.getVirtualAddress(m_renderData));
+		pCommandList->SetGraphicsRootConstantBufferView(0, m_renderData);
 		pCommandList->SetGraphicsRootDescriptorTable(3, m_descriptorHeapStore.getGPUHandle(m_textureDescriptor));
 
 		// Render Objects
 
 		assignObjectDrawGroups(scene);
 
+		uint8_t* pMappedPtr = m_ringBuffer.map();
+		D3D12_GPU_VIRTUAL_ADDRESS drawGroupVirtaulAddress = m_ringBuffer.getCurrentGPUAddress();
+		uint64_t ringBufferBytesWritten = 0;
+
 		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
-
-		// Temp, should resize, but removing resources from the HeapStore is not yet supported
-		OKAY_ASSERT(meshRendererView.size_hint() <= m_instancedObjectData.numElements);
-
-		unsigned char* pMappedPtr = (unsigned char*)m_gpuResourceManager.mapResource(m_instancedObjectData.resourceHandle);
-		pMappedPtr += m_instancedObjectData.resourceOffset;
-
-		D3D12_GPU_VIRTUAL_ADDRESS drawGroupVrtaulAddress = m_gpuResourceManager.getVirtualAddress(m_instancedObjectData);
-
 		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
 		{
 			DrawGroup& drawGroup = m_drawGroups[i];
@@ -163,20 +158,23 @@ namespace Okay
 				pMappedPtr += sizeof(GPUObjectData);
 			}
 
-			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroupVrtaulAddress);
-			drawGroupVrtaulAddress += drawGroup.entities.size() * sizeof(GPUObjectData);
-
 			const DXMesh& dxMesh = m_dxMeshes[drawGroup.dxMeshId];
+
+			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroupVirtaulAddress);
 
 			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticies);
 			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
 
 			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
 
+			uint64_t bytesWritten = drawGroup.entities.size() * sizeof(GPUObjectData);
+			drawGroupVirtaulAddress += bytesWritten;
+			ringBufferBytesWritten += bytesWritten;
+
 			drawGroup.entities.clear();
 		}
 
-		m_gpuResourceManager.unmapResource(m_instancedObjectData.resourceHandle);
+		m_ringBuffer.unmap(ringBufferBytesWritten);
 	}
 
 	void Renderer::postRender()
@@ -188,6 +186,8 @@ namespace Okay
 
 		m_commandContext.wait();
 		m_commandContext.reset();
+
+		m_ringBuffer.jumpToStart();
 	}
 
 	void Renderer::assignObjectDrawGroups(const Scene& scene)

@@ -3,6 +3,7 @@
 #include "Engine/OkayD3D12.h"
 #include "CommandContext.h"
 #include "HeapStore.h"
+#include "RingBuffer.h"
 
 #include <string>
 
@@ -33,11 +34,22 @@ namespace Okay
 
 	class GPUResourceManager
 	{
+		/*
+			Idea for future regarding RingBuffer & uploading meshes:
+
+			If we gotta import a bunch of large meshes and their total size would exceed the RingBuffer set in initialize(),
+			then maybe a solution would be to have a 'setRingBuffer' function in GPUResourceManager.
+
+			That way the renderercan create a new one with the appropriate size and we can shut it down
+			when we know that we won't be importing new meshes for a while (like after initialization).
+			It also means that the "renderer ringbuffer" can't be full of meshes that are being uploaded.
+		*/
+
 	public:
 		GPUResourceManager() = default;
 		virtual ~GPUResourceManager() = default;
 
-		void initialize(ID3D12Device* pDevice, CommandContext& commandContext);
+		void initialize(ID3D12Device* pDevice, CommandContext& commandContext, RingBuffer& ringBuffer);
 		void shutdown();
 
 		Allocation createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, const void* pData);
@@ -57,9 +69,6 @@ namespace Okay
 		DescriptorDesc createDescriptorDesc(const Allocation& allocation, DescriptorType type, bool nullDesc);
 
 	private:
-		void createUploadResource(ID3D12Resource** ppResource, uint64_t byteSize);
-		void resizeUploadBuffer(uint64_t newSize);
-
 		void updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData);
 		void updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData);
 		void updateTexture(ID3D12Resource* pDXResource, unsigned char* pData);
@@ -68,11 +77,9 @@ namespace Okay
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
-		CommandContext* m_pCommandContext = nullptr;
 
-		ID3D12Resource* m_pUploadBuffer = nullptr;
-		uint64_t m_uploadHeapCurrentSize = INVALID_UINT64;
-		uint64_t m_uploadHeapMaxSize = INVALID_UINT64;
+		CommandContext* m_pCommandContext = nullptr;
+		RingBuffer* m_pRingBuffer = nullptr;
 
 		HeapStore m_heapStore;
 
