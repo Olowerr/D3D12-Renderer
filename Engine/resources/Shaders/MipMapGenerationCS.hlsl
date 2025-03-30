@@ -1,0 +1,35 @@
+
+// Structs
+struct MipData
+{
+    float currentMipLevel;
+};
+
+// CBuffers
+ConstantBuffer<MipData> mipData : register(b0, space0);
+
+// SRVs
+Texture2D srvMip : register(t0, space0);
+
+// UAVs
+RWTexture2D<unorm float4> uavMips[16] : register(u0, space0);
+
+// Samplers
+SamplerState sampy : register(s0, space0);
+
+[numthreads(16, 16, 1)]
+void main(uint3 DTid : SV_DispatchThreadID)
+{
+    uint2 mipSize = uint2(0, 0);
+    uavMips[mipData.currentMipLevel].GetDimensions(mipSize.x, mipSize.y);
+    
+    if (DTid.x >= mipSize.x || DTid.y >= mipSize.y)
+    {
+        return;
+    }
+    
+    float2 uv = float2(DTid.xy) / (float2)mipSize;
+            
+    float3 color = srvMip.SampleLevel(sampy, uv, mipData.currentMipLevel - 1).rgb;
+    uavMips[mipData.currentMipLevel][DTid.xy] = float4(color, 1.f);
+}

@@ -105,5 +105,6 @@
   <ItemGroup>
     <FxCompile Include="resources\Shaders\VertexShader.hlsl" />
     <FxCompile Include="resources\Shaders\PixelShader.hlsl" />
+    <FxCompile Include="resources\Shaders\MipMapGenerationCS.hlsl" />
   </ItemGroup>
 </Project>

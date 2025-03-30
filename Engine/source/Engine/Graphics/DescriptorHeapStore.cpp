@@ -53,7 +53,7 @@ namespace Okay
 				break;
 
 			case OKAY_DESCRIPTOR_TYPE_UAV:
-				OKAY_ASSERT(false); // TODO: Implement UAV lol (need "counterResource" and I'm unsure atm how that works :thonk:)
+				m_pDevice->CreateUnorderedAccessView(desc.pDXResource, nullptr, desc.nullDesc ? nullptr : &desc.uavDesc, descriptorHandle);
 				break;
 
 			case OKAY_DESCRIPTOR_TYPE_RTV:

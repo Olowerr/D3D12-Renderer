@@ -4,7 +4,7 @@ namespace Okay
 {
 	void RenderPass::initialize(ID3D12Device* pDevice, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& pipelineDesc, const D3D12_ROOT_SIGNATURE_DESC& rootSignatureDesc)
 	{
-		createRootSignature(pDevice, rootSignatureDesc);
+		m_pRootSignature = createRootSignature(pDevice, rootSignatureDesc);
 		createPSO(pDevice, pipelineDesc);
 
 		ID3D12CommandAllocator* pCommandAllocator = nullptr;
@@ -36,21 +36,6 @@ namespace Okay
 		m_pCommandBundle->SetPipelineState(m_pPSO);
 
 		m_pCommandBundle->Close();
-	}
-
-	void RenderPass::createRootSignature(ID3D12Device* pDevice, const D3D12_ROOT_SIGNATURE_DESC& rootSignatureDesc)
-	{
-		ID3DBlob* pRootBlob = nullptr;
-		ID3DBlob* pErrorBlob = nullptr;
-		
-		HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, &pRootBlob, &pErrorBlob);
-		if (FAILED(hr))
-		{
-			printf("Failed to serialize root signature: %s\n", (char*)pErrorBlob->GetBufferPointer());
-			OKAY_ASSERT(false);
-		}
-
-		DX_CHECK(pDevice->CreateRootSignature(0, pRootBlob->GetBufferPointer(), pRootBlob->GetBufferSize(), IID_PPV_ARGS(&m_pRootSignature)));
 	}
 
 	void RenderPass::createPSO(ID3D12Device* pDevice, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& pipelineDesc)

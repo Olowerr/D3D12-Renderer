@@ -25,7 +25,7 @@ namespace Okay
 		bool committed = false;
 	};
 
-	struct Descriptor
+	struct Descriptor // myb rework to hold the GPU/CPU handles?
 	{
 		DescriptorHeapHandle heapHandle = INVALID_DHH;
 		uint32_t heapSlot = INVALID_UINT32;

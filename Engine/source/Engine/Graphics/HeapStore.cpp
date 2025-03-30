@@ -7,8 +7,8 @@ namespace Okay
 		m_pDevice = pDevice;
 
 		// texture alignment aligns for buffers too :3
-		m_staticHeapCreationSize = alignAddress64(staticHeapCreationSize, TEXTURE_DATA_ALIGNMENT);
-		m_dynamicHeapCreationSize = alignAddress64(dynamicHeapCreationSize, TEXTURE_DATA_ALIGNMENT);
+		m_staticHeapCreationSize = alignAddress64(staticHeapCreationSize, TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+		m_dynamicHeapCreationSize = alignAddress64(dynamicHeapCreationSize, TEXTURE_DATA_PLACEMENT_ALIGNMENT);
 	}
 
 	void HeapStore::shutdown()
@@ -56,7 +56,7 @@ namespace Okay
 		ID3D12Resource* pResource = nullptr;
 		DX_CHECK(m_pDevice->CreatePlacedResource(heap.pHeap, heap.usedHeapSize, &resourceDesc, initialState, pClearValue, IID_PPV_ARGS(&pResource)));
 
-		heap.usedHeapSize = Okay::alignAddress64(heap.usedHeapSize + resourceAllocationInfo.SizeInBytes, RESOURCE_PLACEMENT_ALIGNMENT);
+		heap.usedHeapSize += alignAddress64(resourceAllocationInfo.SizeInBytes, RESOURCE_PLACEMENT_ALIGNMENT);
 
 		return pResource;
 	}

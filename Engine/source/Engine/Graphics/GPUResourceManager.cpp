@@ -2,11 +2,12 @@
 
 namespace Okay
 {
-	void GPUResourceManager::initialize(ID3D12Device* pDevice, CommandContext& commandContext, RingBuffer& ringBuffer)
+	void GPUResourceManager::initialize(ID3D12Device* pDevice, CommandContext& commandContext, RingBuffer& ringBuffer, DescriptorHeapStore& descriptorHeapStore)
 	{
 		m_pDevice = pDevice;
 		m_pCommandContext = &commandContext;
 		m_pRingBuffer = &ringBuffer;
+		m_pDescriptorHeapStore = &descriptorHeapStore;
 
 		m_heapStore.initialize(m_pDevice, 100'000'000, 1'000'000);
 	}
@@ -23,13 +24,11 @@ namespace Okay
 		m_pDevice = nullptr;
 	}
 
-	Allocation GPUResourceManager::createTexture(uint32_t width, uint32_t height, DXGI_FORMAT format, uint32_t flags, const void* pData)
+	Allocation GPUResourceManager::createTexture(uint32_t width, uint32_t height, uint16_t mipLevels, DXGI_FORMAT format, uint32_t flags, const void* pData)
 	{
 		OKAY_ASSERT(width);
 		OKAY_ASSERT(height);
 		OKAY_ASSERT(TextureFlags(flags) != OKAY_TEXTURE_FLAG_NONE);
-
-		uint16_t resourceIdx = (uint16_t)m_resources.size();
 
 		bool isDepth = flags & OKAY_TEXTURE_FLAG_DEPTH;
 
@@ -54,7 +53,7 @@ namespace Okay
 		}
 
 		Resource& resource = m_resources.emplace_back();
-		resource.pDXResource = m_heapStore.requestResource(D3D12_HEAP_TYPE_DEFAULT, width, height, 1, DXGI_FORMAT(format), pClearValue, isDepth);
+		resource.pDXResource = m_heapStore.requestResource(D3D12_HEAP_TYPE_DEFAULT, width, height, mipLevels, DXGI_FORMAT(format), pClearValue, isDepth);
 
 		D3D12_RESOURCE_DESC desc = resource.pDXResource->GetDesc();
 		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &desc);
@@ -64,16 +63,16 @@ namespace Okay
 
 		if (pData)
 		{
-			updateTexture(resource.pDXResource, (unsigned char*)pData);
+			updateTexture(resource.pDXResource, (uint8_t*)pData);
 
 			if (flags & OKAY_TEXTURE_FLAG_SHADER_READ)
 			{
-				m_pCommandContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				m_pCommandContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			}
 		}
 
 		Allocation allocation = {};
-		allocation.resourceHandle = (ResourceHandle)resourceIdx;
+		allocation.resourceHandle = ResourceHandle(m_resources.size() - 1);
 		allocation.resourceOffset = 0;
 		allocation.elementSize = resource.maxSize;
 		allocation.numElements = 1;
@@ -239,7 +238,7 @@ namespace Okay
 	{
 		D3D12_RANGE readRange = { 0, 0 };
 
-		unsigned char* pMappedData = nullptr;
+		uint8_t* pMappedData = nullptr;
 		DX_CHECK(pDXResource->Map(0, &readRange, (void**)&pMappedData));
 
 		memcpy(pMappedData + resourceOffset, pData, byteSize);
@@ -247,29 +246,15 @@ namespace Okay
 		pDXResource->Unmap(0, nullptr);
 	}
 
-	void GPUResourceManager::updateTexture(ID3D12Resource* pDXResource, unsigned char* pData)
+	void GPUResourceManager::updateTexture(ID3D12Resource* pDXResource, uint8_t* pData)
 	{
-		/*
-			Currently works by:
-				1. Create new upload heap
-				2. CPU copy texture data into upload heap
-				3. Copy upload heap to target resource
-				4. Flush command queue
-				5. Release upload heap
-
-			Can create the upload heap at initialization, but it might not be used a lot after initialization
-			and might need to resize
-
-			Maybe can also try copying from CPU directly into target?
-			Since now we're creating a new upload heap everytime, so maybe worth ?
-		*/
-
 		D3D12_RESOURCE_DESC textureDesc = pDXResource->GetDesc();
+		textureDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footPrint{};
+		D3D12_PLACED_SUBRESOURCE_FOOTPRINT footPrint = {};
 		uint64_t rowSizeInBytes = 0;
-
 		m_pDevice->GetCopyableFootprints(&textureDesc, 0, 1, 0, &footPrint, nullptr, &rowSizeInBytes, nullptr);
+
 
 		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &textureDesc);
 
@@ -285,8 +270,21 @@ namespace Okay
 
 		textureUploadBuffer.unmap((uint64_t)textureDesc.Height * footPrint.Footprint.RowPitch);
 
+
+		D3D12_HEAP_PROPERTIES heapProperties{};
+		heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+		heapProperties.CreationNodeMask = 0;
+		heapProperties.VisibleNodeMask = 0;
+
+		ID3D12Resource* pDXCopy = nullptr;
+		DX_CHECK(m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&pDXCopy)));
+
+
+
 		D3D12_TEXTURE_COPY_LOCATION copyDst{};
-		copyDst.pResource = pDXResource;
+		copyDst.pResource = pDXCopy;
 		copyDst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 		copyDst.SubresourceIndex = 0;
 
@@ -296,12 +294,149 @@ namespace Okay
 		copySrc.PlacedFootprint = footPrint;
 		copySrc.PlacedFootprint.Offset = 0;
 
-		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
-		pCommandList->CopyTextureRegion(&copyDst, 0, 0, 0, &copySrc, nullptr);
 
-		m_pCommandContext->flush();
+		CommandContext computeContext;
+		computeContext.initialize(m_pDevice, D3D12_COMMAND_LIST_TYPE_COMPUTE);
+		ID3D12GraphicsCommandList* pGraphicsComputeList = computeContext.getCommandList();
+
+		pGraphicsComputeList->CopyTextureRegion(&copyDst, 0, 0, 0, &copySrc, nullptr);
+
+
+
+
+		D3D12_DESCRIPTOR_RANGE descriptorRanges[2] = {};
+		descriptorRanges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+		descriptorRanges[0].NumDescriptors = 16;
+		descriptorRanges[0].OffsetInDescriptorsFromTableStart = 1;
+		descriptorRanges[0].BaseShaderRegister = 0;
+		descriptorRanges[0].RegisterSpace = 0;
+
+		descriptorRanges[1].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		descriptorRanges[1].NumDescriptors = 1;
+		descriptorRanges[1].OffsetInDescriptorsFromTableStart = 0;
+		descriptorRanges[1].BaseShaderRegister = 0;
+		descriptorRanges[1].RegisterSpace = 0;
+
+		D3D12_ROOT_PARAMETER rootParams[2] = {};
+		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		rootParams[0].DescriptorTable.NumDescriptorRanges = _countof(descriptorRanges);
+		rootParams[0].DescriptorTable.pDescriptorRanges = descriptorRanges;
+
+		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		rootParams[1].Descriptor.ShaderRegister = 0;
+		rootParams[1].Descriptor.RegisterSpace = 0;
+
+		D3D12_STATIC_SAMPLER_DESC defaultSampler = createDefaultStaticPointSamplerDesc();
+		defaultSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+		D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
+		rootDesc.NumParameters = _countof(rootParams);
+		rootDesc.pParameters = rootParams;
+		rootDesc.NumStaticSamplers = 1;
+		rootDesc.pStaticSamplers = &defaultSampler;
+		rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
+
+		ID3D12RootSignature* pRootSignature = createRootSignature(m_pDevice, rootDesc);
+
+		ID3DBlob* pShaderBlob = nullptr;
+
+		D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
+		computeDesc.pRootSignature = pRootSignature;
+		computeDesc.CS = compileShader(SHADER_PATH / "MipMapGenerationCS.hlsl", "cs_5_1", &pShaderBlob);
+		computeDesc.NodeMask = 0;
+		computeDesc.CachedPSO.pCachedBlob = nullptr;
+		computeDesc.CachedPSO.CachedBlobSizeInBytes = 0;
+		computeDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
+
+		ID3D12PipelineState* pPipelineState = nullptr;
+		DX_CHECK(m_pDevice->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(&pPipelineState)));
+
+		D3D12_RELEASE(pShaderBlob);
+
+
+		D3D12_GPU_VIRTUAL_ADDRESS cbAddress = m_pRingBuffer->getCurrentGPUAddress();
+		uint8_t* pMappedMipData = m_pRingBuffer->map();
+
+
+		DescriptorHeapHandle descHeapHandle = m_pDescriptorHeapStore->createDescriptorHeap(textureDesc.MipLevels, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		DescriptorDesc srvDesc = {};
+		srvDesc.type = OKAY_DESCRIPTOR_TYPE_SRV;
+		srvDesc.pDXResource = pDXCopy;
+		Descriptor srv = m_pDescriptorHeapStore->allocateDescriptors(descHeapHandle, OKAY_DESCRIPTOR_APPEND, &srvDesc, 1);
+
+
+		pGraphicsComputeList->SetPipelineState(pPipelineState);
+		pGraphicsComputeList->SetComputeRootSignature(pRootSignature);
+
+		ID3D12DescriptorHeap* pDescriptorHeap = m_pDescriptorHeapStore->getDXDescriptorHeap(descHeapHandle);	
+		pGraphicsComputeList->SetDescriptorHeaps(1, &pDescriptorHeap);
+
+
+		D3D12_GPU_DESCRIPTOR_HANDLE startGPUHandle = m_pDescriptorHeapStore->getDXDescriptorHeap(descHeapHandle)->GetGPUDescriptorHandleForHeapStart();
+		pGraphicsComputeList->SetComputeRootDescriptorTable(0, startGPUHandle);
+
+		startGPUHandle.ptr += m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		computeContext.transitionResource(pDXCopy, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+		for (uint32_t i = 1; i < textureDesc.MipLevels; i++)
+		{
+			DescriptorDesc uavDesc = {};
+			uavDesc.type = OKAY_DESCRIPTOR_TYPE_UAV;
+			uavDesc.pDXResource = pDXCopy;
+
+			uavDesc.nullDesc = false;
+			uavDesc.uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+			uavDesc.uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			uavDesc.uavDesc.Texture2D.MipSlice = i;
+			uavDesc.uavDesc.Texture2D.PlaneSlice = 0;
+
+			m_pDescriptorHeapStore->allocateDescriptors(descHeapHandle, OKAY_DESCRIPTOR_APPEND, &uavDesc, 1);
+			
+			computeContext.transitionSubresource(pDXCopy, i, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+
+			struct MipData
+			{
+				float currentMipLevel = 0.f;
+			};
+
+			MipData mipData = {};
+			mipData.currentMipLevel = (float)i - 1;
+
+			memcpy(pMappedMipData, &mipData, sizeof(MipData));
+
+
+			pGraphicsComputeList->SetComputeRootConstantBufferView(1, cbAddress);
+
+			uint32_t mipWidth = textureDesc.Width / glm::pow(2, i);
+			uint32_t mipHeight = textureDesc.Height / glm::pow(2, i);
+
+			pGraphicsComputeList->Dispatch(mipWidth / 16 + 1, mipHeight / 16 + 1, 1);
+
+			computeContext.transitionSubresource(pDXCopy, i, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+			pMappedMipData += alignAddress64(sizeof(MipData), BUFFER_DATA_ALIGNMENT);
+			cbAddress += alignAddress64(sizeof(MipData), BUFFER_DATA_ALIGNMENT);
+		}
+
+		m_pRingBuffer->unmap(BUFFER_DATA_ALIGNMENT * (textureDesc.MipLevels - 1));
+
+		computeContext.transitionResource(pDXCopy, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		pGraphicsComputeList->CopyResource(pDXResource, pDXCopy);
+
+		computeContext.transitionResource(pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+
+		computeContext.flush();
+		computeContext.shutdown();
+
 
 		textureUploadBuffer.shutdown();
+		D3D12_RELEASE(pDXCopy);
+		D3D12_RELEASE(pPipelineState);
+		D3D12_RELEASE(pRootSignature);
 	}
 
 	void GPUResourceManager::validateResourceHandle(ResourceHandle handle)

@@ -22,9 +22,10 @@
 #define DX_CHECK(x) OKAY_ASSERT2(SUCCEEDED(x))
 #define D3D12_RELEASE(x) if (x) { x->Release(); x = nullptr; }0
 
-#define RESOURCE_PLACEMENT_ALIGNMENT	D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT
-#define BUFFER_DATA_ALIGNMENT			D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT
-#define TEXTURE_DATA_ALIGNMENT			D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
+#define RESOURCE_PLACEMENT_ALIGNMENT		D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT
+#define BUFFER_DATA_ALIGNMENT				D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT
+#define TEXTURE_DATA_PLACEMENT_ALIGNMENT	D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT
+#define TEXTURE_DATA_PITCH_ALIGNMENT		D3D12_TEXTURE_DATA_PITCH_ALIGNMENT
 
 namespace Okay
 {
@@ -79,6 +80,8 @@ namespace Okay
 		DXGI_ADAPTER_DESC adapterDesc{};
 		pAdapter->GetDesc(&adapterDesc);
 
+		// https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/nf-dxgi1_4-idxgiadapter3-queryvideomemoryinfo
+
 		printf("-- GPU INFO --\n");
 		printf("Name: %ws\n", adapterDesc.Description);
 		printf("Dedicated Video Memory: %.2f GB\n", adapterDesc.DedicatedVideoMemory / 1'000'000'000.f);
@@ -112,6 +115,27 @@ namespace Okay
 		shaderByteCode.BytecodeLength = (*pShaderBlob)->GetBufferSize();
 
 		return shaderByteCode;
+	}
+
+	inline ID3D12RootSignature* createRootSignature(ID3D12Device* pDevice, const D3D12_ROOT_SIGNATURE_DESC& rootSignatureDesc)
+	{
+		ID3DBlob* pRootBlob = nullptr;
+		ID3DBlob* pErrorBlob = nullptr;
+
+		HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, &pRootBlob, &pErrorBlob);
+		if (FAILED(hr))
+		{
+			printf("Failed to serialize root signature: %s\n", (char*)pErrorBlob->GetBufferPointer());
+			OKAY_ASSERT(false);
+		}
+
+		ID3D12RootSignature* pRootSignature = nullptr;
+		DX_CHECK(pDevice->CreateRootSignature(0, pRootBlob->GetBufferPointer(), pRootBlob->GetBufferSize(), IID_PPV_ARGS(&pRootSignature)));
+
+		D3D12_RELEASE(pRootBlob);
+		D3D12_RELEASE(pErrorBlob);
+
+		return pRootSignature;
 	}
 
 	constexpr D3D12_BLEND_DESC createDefaultBlendDesc()
@@ -234,14 +258,14 @@ namespace Okay
 	constexpr D3D12_STATIC_SAMPLER_DESC createDefaultStaticPointSamplerDesc()
 	{
 		D3D12_STATIC_SAMPLER_DESC desc = {};
-		desc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+		desc.Filter = D3D12_FILTER_ANISOTROPIC;
 		
 		desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 
 		desc.MipLODBias = 0.f;
-		desc.MaxAnisotropy = 1;
+		desc.MaxAnisotropy = 16;
 		desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER; //?
 		desc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE;
 		

@@ -2,17 +2,17 @@
 
 namespace Okay
 {
-	void CommandContext::initialize(ID3D12Device* pDevice)
+	void CommandContext::initialize(ID3D12Device* pDevice, D3D12_COMMAND_LIST_TYPE type)
 	{
 		D3D12_COMMAND_QUEUE_DESC queueDesc{};
-		queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+		queueDesc.Type = type;
 		queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
 		queueDesc.NodeMask = 0;
 		queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 
-		DX_CHECK(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_pCommandAllocator)));
+		DX_CHECK(pDevice->CreateCommandAllocator(type, IID_PPV_ARGS(&m_pCommandAllocator)));
 		DX_CHECK(pDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_pCommandQueue)));
-		DX_CHECK(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_pCommandAllocator, nullptr, IID_PPV_ARGS(&m_pCommandList)));
+		DX_CHECK(pDevice->CreateCommandList(0, type, m_pCommandAllocator, nullptr, IID_PPV_ARGS(&m_pCommandList)));
 
 		DX_CHECK(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_pFence)));
 		m_fenceValue = 0;
@@ -78,8 +78,39 @@ namespace Okay
 		barrier.Transition.pResource = pResource;
 		barrier.Transition.StateBefore = oldState;
 		barrier.Transition.StateAfter = newState;
-		barrier.Transition.Subresource = 0;
+		barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
 		m_pCommandList->ResourceBarrier(1, &barrier);
+	}
+
+	void CommandContext::transitionSubresource(ID3D12Resource* pResource, uint32_t subresource, D3D12_RESOURCE_STATES oldState, D3D12_RESOURCE_STATES newState)
+	{
+		D3D12_RESOURCE_BARRIER barrier{};
+		barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+		barrier.Transition.pResource = pResource;
+		barrier.Transition.StateBefore = oldState;
+		barrier.Transition.StateAfter = newState;
+		barrier.Transition.Subresource = subresource;
+
+		m_pCommandList->ResourceBarrier(1, &barrier);
+	}
+
+	void CommandContext::transitionSubresources(ID3D12Resource* pResource, uint32_t* pSubIndicies, uint32_t numSubresources, D3D12_RESOURCE_STATES oldState, D3D12_RESOURCE_STATES newState)
+	{
+		OKAY_ASSERT(numSubresources < 16);
+		D3D12_RESOURCE_BARRIER barriers[16] = {}; // no way we'll need more than this right?
+		
+		for (uint32_t i = 0; i < numSubresources; i++)
+		{
+			barriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barriers[i].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+			barriers[i].Transition.pResource = pResource;
+			barriers[i].Transition.StateBefore = oldState;
+			barriers[i].Transition.StateAfter = newState;
+			barriers[i].Transition.Subresource = pSubIndicies[i];
+		}
+
+		m_pCommandList->ResourceBarrier(numSubresources, barriers);
 	}
 }

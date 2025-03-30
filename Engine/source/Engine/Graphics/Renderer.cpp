@@ -28,14 +28,14 @@ namespace Okay
 		DX_CHECK(CreateDXGIFactory(IID_PPV_ARGS(&pFactory)));
 
 		createDevice(pFactory);
-		m_commandContext.initialize(m_pDevice);
+		m_commandContext.initialize(m_pDevice, D3D12_COMMAND_LIST_TYPE_DIRECT);
 
 		createSwapChain(pFactory, window);
 
 		m_ringBuffer.initialize(m_pDevice, 10'000'000);
-
-		m_gpuResourceManager.initialize(m_pDevice, m_commandContext, m_ringBuffer);
 		m_descriptorHeapStore.initialize(m_pDevice, 50);
+
+		m_gpuResourceManager.initialize(m_pDevice, m_commandContext, m_ringBuffer, m_descriptorHeapStore);
 
 		fetchBackBuffersAndDSV();
 
@@ -144,6 +144,7 @@ namespace Okay
 		uint64_t ringBufferBytesWritten = 0;
 
 		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
+
 		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
 		{
 			DrawGroup& drawGroup = m_drawGroups[i];
@@ -289,7 +290,7 @@ namespace Okay
 
 		// Create depth stencil texture & descriptor
 		D3D12_RESOURCE_DESC resourceDesc = m_backBuffers[0]->GetDesc();
-		Allocation dsAllocation = m_gpuResourceManager.createTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
+		Allocation dsAllocation = m_gpuResourceManager.createTexture((uint32_t)resourceDesc.Width, resourceDesc.Height, 1, DXGI_FORMAT_D32_FLOAT, OKAY_TEXTURE_FLAG_DEPTH, nullptr);
 
 		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsAllocation, OKAY_DESCRIPTOR_TYPE_DSV, true);
 		m_dsvDescriptor = m_descriptorHeapStore.allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, &dsvDesc, 1);
@@ -420,15 +421,7 @@ namespace Okay
 
 		const Texture& texture = textures[0];
 
-		/*
-			generate mips inside createTexture ? or maybe new function in GPUResourceManager ? : spinthink :
-			if it's part of createTexture() then it'll be required that data is sent in too
-
-			actually createTexture() has to know the number of mips since it's required for resource creation
-			so i guess we just put it in there? makes sense tbh
-		*/
-
-		Allocation textureAlloc = m_gpuResourceManager.createTexture(texture.getWidth(), texture.getHeight(),
+		Allocation textureAlloc = m_gpuResourceManager.createTexture(texture.getWidth(), texture.getHeight(), STD_MIP_LEVELS,
 			DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, texture.getTextureData());
 
 		DescriptorDesc desc = m_gpuResourceManager.createDescriptorDesc(textureAlloc, OKAY_DESCRIPTOR_TYPE_SRV, true);

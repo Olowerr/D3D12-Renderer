@@ -38,7 +38,6 @@ namespace Okay
 	private:
 		void recordBundleCommands();
 
-		void createRootSignature(ID3D12Device* pDevice, const D3D12_ROOT_SIGNATURE_DESC& rootSignatureDesc);
 		void createPSO(ID3D12Device* pDevice, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& pipelineDesc);
 
 	private:

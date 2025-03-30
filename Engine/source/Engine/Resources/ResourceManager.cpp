@@ -31,7 +31,7 @@ namespace Okay
 		AssetID id = (AssetID)m_textures.size();
 
 		int width = 0, height = 0;
-		unsigned char* pData = stbi_load(path.string().c_str(), &width, &height, nullptr, STBI_rgb_alpha);
+		uint8_t* pData = stbi_load(path.string().c_str(), &width, &height, nullptr, STBI_rgb_alpha);
 
 		Texture& texture = m_textures.emplace_back();
 		texture.setTextureData(pData, (uint32_t)width, (uint32_t)height);

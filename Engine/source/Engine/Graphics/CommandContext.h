@@ -10,7 +10,7 @@ namespace Okay
 		CommandContext() = default;
 		virtual ~CommandContext() = default;
 	
-		void initialize(ID3D12Device* pDevice);
+		void initialize(ID3D12Device* pDevice, D3D12_COMMAND_LIST_TYPE type);
 		void shutdown();
 	
 		ID3D12GraphicsCommandList* getCommandList();
@@ -23,6 +23,8 @@ namespace Okay
 		void reset();
 
 		void transitionResource(ID3D12Resource* pResource, D3D12_RESOURCE_STATES oldState, D3D12_RESOURCE_STATES newState);
+		void transitionSubresource(ID3D12Resource* pResource, uint32_t subresource, D3D12_RESOURCE_STATES oldState, D3D12_RESOURCE_STATES newState);
+		void transitionSubresources(ID3D12Resource* pResource, uint32_t* pSubIndicies, uint32_t numSubresources, D3D12_RESOURCE_STATES oldState, D3D12_RESOURCE_STATES newState);
 	
 	private:
 		ID3D12GraphicsCommandList* m_pCommandList = nullptr;
