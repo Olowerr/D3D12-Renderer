@@ -31,8 +31,8 @@ namespace Okay
 	class Renderer
 	{
 	public:
-		static const uint16_t NUM_BACKBUFFERS = 2;
-		static const uint16_t STD_MIP_LEVELS = 6; // "Should" be some kind of setting
+		static const uint8_t NUM_BACKBUFFERS = 2;
+		static const uint8_t MAX_MIP_LEVELS = 16; // "Should" be some kind of setting
 
 	public:
 		Renderer() = default;

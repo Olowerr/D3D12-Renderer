@@ -1,5 +1,7 @@
 #include "GPUResourceManager.h"
 
+#include "glm/gtc/integer.hpp"
+
 namespace Okay
 {
 	void GPUResourceManager::initialize(ID3D12Device* pDevice, CommandContext& commandContext, RingBuffer& ringBuffer, DescriptorHeapStore& descriptorHeapStore)
@@ -51,6 +53,9 @@ namespace Okay
 			clearValue.Color[2] = 0.f;
 			clearValue.Color[3] = 0.f;
 		}
+
+		// Ensure we don't try to create more mipmaps than possible given the width & height
+		mipLevels = glm::min(mipLevels, (uint16_t)(glm::log2(glm::max(width, height)) + 1));
 
 		Resource& resource = m_resources.emplace_back();
 		resource.pDXResource = m_heapStore.requestResource(D3D12_HEAP_TYPE_DEFAULT, width, height, mipLevels, DXGI_FORMAT(format), pClearValue, isDepth);
