@@ -76,7 +76,9 @@ namespace Okay
 
 		void validateResourceHandle(ResourceHandle handle);
 
-		void generateMipMaps(ID3D12Resource* pDXesource);
+		void initiateMipMapGeneration();
+		void generateMipMaps(ID3D12Resource* pDXResource);
+
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
@@ -88,5 +90,9 @@ namespace Okay
 		HeapStore m_heapStore;
 
 		std::vector<Resource> m_resources;
+
+	private:
+		ID3D12RootSignature* m_pMipMapRootSignature = nullptr;
+		ID3D12PipelineState* m_pMipMapPSO = nullptr;
 	};
 }

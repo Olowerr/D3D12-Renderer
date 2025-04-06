@@ -12,16 +12,22 @@ namespace Okay
 		m_pDescriptorHeapStore = &descriptorHeapStore;
 
 		m_heapStore.initialize(m_pDevice, 100'000'000, 1'000'000);
+
+		initiateMipMapGeneration();
 	}
 
 	void GPUResourceManager::shutdown()
 	{
 		for (Resource& resource : m_resources)
+		{
 			D3D12_RELEASE(resource.pDXResource);
-
+		}
 		m_resources.clear();
 
 		m_heapStore.shutdown();
+
+		D3D12_RELEASE(m_pMipMapRootSignature);
+		D3D12_RELEASE(m_pMipMapPSO);
 
 		m_pDevice = nullptr;
 	}
@@ -72,7 +78,14 @@ namespace Okay
 
 			if (flags & OKAY_TEXTURE_FLAG_SHADER_READ)
 			{
-				m_pCommandContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				if (mipLevels > 1 || mipLevels == 0)
+				{
+					generateMipMaps(resource.pDXResource);
+				}
+				else
+				{
+					m_pCommandContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				}
 			}
 		}
 
@@ -276,20 +289,8 @@ namespace Okay
 		textureUploadBuffer.unmap((uint64_t)textureDesc.Height * footPrint.Footprint.RowPitch);
 
 
-		D3D12_HEAP_PROPERTIES heapProperties{};
-		heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-		heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-		heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-		heapProperties.CreationNodeMask = 0;
-		heapProperties.VisibleNodeMask = 0;
-
-		ID3D12Resource* pDXCopy = nullptr;
-		DX_CHECK(m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&pDXCopy)));
-
-
-
 		D3D12_TEXTURE_COPY_LOCATION copyDst{};
-		copyDst.pResource = pDXCopy;
+		copyDst.pResource = pDXResource;
 		copyDst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 		copyDst.SubresourceIndex = 0;
 
@@ -299,16 +300,20 @@ namespace Okay
 		copySrc.PlacedFootprint = footPrint;
 		copySrc.PlacedFootprint.Offset = 0;
 
+		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
+		pCommandList->CopyTextureRegion(&copyDst, 0, 0, 0, &copySrc, nullptr);
 
-		CommandContext computeContext;
-		computeContext.initialize(m_pDevice, D3D12_COMMAND_LIST_TYPE_COMPUTE);
-		ID3D12GraphicsCommandList* pGraphicsComputeList = computeContext.getCommandList();
+		m_pCommandContext->flush();
+		textureUploadBuffer.shutdown();
+	}
 
-		pGraphicsComputeList->CopyTextureRegion(&copyDst, 0, 0, 0, &copySrc, nullptr);
+	void GPUResourceManager::validateResourceHandle(ResourceHandle handle)
+	{
+		OKAY_ASSERT(handle < (ResourceHandle)m_resources.size());
+	}
 
-
-
-
+	void GPUResourceManager::initiateMipMapGeneration()
+	{
 		D3D12_DESCRIPTOR_RANGE descriptorRanges[2] = {};
 		descriptorRanges[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
 		descriptorRanges[0].NumDescriptors = 16;
@@ -322,6 +327,7 @@ namespace Okay
 		descriptorRanges[1].BaseShaderRegister = 0;
 		descriptorRanges[1].RegisterSpace = 0;
 
+
 		D3D12_ROOT_PARAMETER rootParams[2] = {};
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
@@ -333,7 +339,10 @@ namespace Okay
 		rootParams[1].Descriptor.ShaderRegister = 0;
 		rootParams[1].Descriptor.RegisterSpace = 0;
 
+
 		D3D12_STATIC_SAMPLER_DESC defaultSampler = createDefaultStaticPointSamplerDesc();
+		defaultSampler.Filter = D3D12_FILTER_ANISOTROPIC;
+		defaultSampler.MaxAnisotropy = D3D12_MAX_MAXANISOTROPY;
 		defaultSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
 		D3D12_ROOT_SIGNATURE_DESC rootDesc = {};
@@ -343,109 +352,116 @@ namespace Okay
 		rootDesc.pStaticSamplers = &defaultSampler;
 		rootDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_NONE;
 
-		ID3D12RootSignature* pRootSignature = createRootSignature(m_pDevice, rootDesc);
+		m_pMipMapRootSignature = createRootSignature(m_pDevice, rootDesc);
+
 
 		ID3DBlob* pShaderBlob = nullptr;
 
 		D3D12_COMPUTE_PIPELINE_STATE_DESC computeDesc = {};
-		computeDesc.pRootSignature = pRootSignature;
+		computeDesc.pRootSignature = m_pMipMapRootSignature;
 		computeDesc.CS = compileShader(SHADER_PATH / "MipMapGenerationCS.hlsl", "cs_5_1", &pShaderBlob);
 		computeDesc.NodeMask = 0;
 		computeDesc.CachedPSO.pCachedBlob = nullptr;
 		computeDesc.CachedPSO.CachedBlobSizeInBytes = 0;
 		computeDesc.Flags = D3D12_PIPELINE_STATE_FLAG_NONE;
 
-		ID3D12PipelineState* pPipelineState = nullptr;
-		DX_CHECK(m_pDevice->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(&pPipelineState)));
+		DX_CHECK(m_pDevice->CreateComputePipelineState(&computeDesc, IID_PPV_ARGS(&m_pMipMapPSO)));
 
 		D3D12_RELEASE(pShaderBlob);
+	}
+
+	void GPUResourceManager::generateMipMaps(ID3D12Resource* pDXResource)
+	{
+		CommandContext computeContext;
+		computeContext.initialize(m_pDevice, D3D12_COMMAND_LIST_TYPE_COMPUTE);
+		ID3D12GraphicsCommandList* pGraphicsComputeList = computeContext.getCommandList();
+		pGraphicsComputeList->SetName(L"MipMap Compute CommandList");
+
+		D3D12_RESOURCE_DESC textureDesc = pDXResource->GetDesc();
+		textureDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+		D3D12_HEAP_PROPERTIES heapProperties{};
+		heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+		heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+		heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+		heapProperties.CreationNodeMask = 0;
+		heapProperties.VisibleNodeMask = 0;
+
+		ID3D12Resource* pDXIntermediateTexture = nullptr;
+		DX_CHECK(m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &textureDesc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&pDXIntermediateTexture)));
+
+		computeContext.transitionResource(pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		pGraphicsComputeList->CopyResource(pDXIntermediateTexture, pDXResource);
+		
+		computeContext.transitionResource(pDXIntermediateTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+
+		DescriptorHeapHandle descHeapHandle = m_pDescriptorHeapStore->createDescriptorHeap(textureDesc.MipLevels, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+		DescriptorDesc textureSRVDesc = {};
+		textureSRVDesc.type = OKAY_DESCRIPTOR_TYPE_SRV;
+		textureSRVDesc.pDXResource = pDXIntermediateTexture;
+		m_pDescriptorHeapStore->allocateDescriptors(descHeapHandle, OKAY_DESCRIPTOR_APPEND, &textureSRVDesc, 1);
+
+
+		ID3D12DescriptorHeap* pDescriptorHeap = m_pDescriptorHeapStore->getDXDescriptorHeap(descHeapHandle);
+		D3D12_GPU_DESCRIPTOR_HANDLE startGPUHandle = m_pDescriptorHeapStore->getDXDescriptorHeap(descHeapHandle)->GetGPUDescriptorHandleForHeapStart();
+
+
+		pGraphicsComputeList->SetPipelineState(m_pMipMapPSO);
+		pGraphicsComputeList->SetComputeRootSignature(m_pMipMapRootSignature);
+
+		pGraphicsComputeList->SetDescriptorHeaps(1, &pDescriptorHeap);
+
+		pGraphicsComputeList->SetComputeRootDescriptorTable(0, startGPUHandle);
 
 
 		D3D12_GPU_VIRTUAL_ADDRESS cbAddress = m_pRingBuffer->getCurrentGPUAddress();
 		uint8_t* pMappedMipData = m_pRingBuffer->map();
 
-
-		DescriptorHeapHandle descHeapHandle = m_pDescriptorHeapStore->createDescriptorHeap(textureDesc.MipLevels, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-		DescriptorDesc srvDesc = {};
-		srvDesc.type = OKAY_DESCRIPTOR_TYPE_SRV;
-		srvDesc.pDXResource = pDXCopy;
-		Descriptor srv = m_pDescriptorHeapStore->allocateDescriptors(descHeapHandle, OKAY_DESCRIPTOR_APPEND, &srvDesc, 1);
-
-
-		pGraphicsComputeList->SetPipelineState(pPipelineState);
-		pGraphicsComputeList->SetComputeRootSignature(pRootSignature);
-
-		ID3D12DescriptorHeap* pDescriptorHeap = m_pDescriptorHeapStore->getDXDescriptorHeap(descHeapHandle);	
-		pGraphicsComputeList->SetDescriptorHeaps(1, &pDescriptorHeap);
-
-
-		D3D12_GPU_DESCRIPTOR_HANDLE startGPUHandle = m_pDescriptorHeapStore->getDXDescriptorHeap(descHeapHandle)->GetGPUDescriptorHandleForHeapStart();
-		pGraphicsComputeList->SetComputeRootDescriptorTable(0, startGPUHandle);
-
-		startGPUHandle.ptr += m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-
-		computeContext.transitionResource(pDXCopy, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
 		for (uint32_t i = 1; i < textureDesc.MipLevels; i++)
 		{
-			DescriptorDesc uavDesc = {};
-			uavDesc.type = OKAY_DESCRIPTOR_TYPE_UAV;
-			uavDesc.pDXResource = pDXCopy;
+			DescriptorDesc currentMipUAVDesc = {};
+			currentMipUAVDesc.type = OKAY_DESCRIPTOR_TYPE_UAV;
+			currentMipUAVDesc.pDXResource = pDXIntermediateTexture;
 
-			uavDesc.nullDesc = false;
-			uavDesc.uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-			uavDesc.uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-			uavDesc.uavDesc.Texture2D.MipSlice = i;
-			uavDesc.uavDesc.Texture2D.PlaneSlice = 0;
+			currentMipUAVDesc.nullDesc = false;
+			currentMipUAVDesc.uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
+			currentMipUAVDesc.uavDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+			currentMipUAVDesc.uavDesc.Texture2D.MipSlice = i;
+			currentMipUAVDesc.uavDesc.Texture2D.PlaneSlice = 0;
 
-			m_pDescriptorHeapStore->allocateDescriptors(descHeapHandle, OKAY_DESCRIPTOR_APPEND, &uavDesc, 1);
-			
-			computeContext.transitionSubresource(pDXCopy, i, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-
-			struct MipData
-			{
-				float currentMipLevel = 0.f;
-			};
-
-			MipData mipData = {};
-			mipData.currentMipLevel = (float)i - 1;
-
-			memcpy(pMappedMipData, &mipData, sizeof(MipData));
+			m_pDescriptorHeapStore->allocateDescriptors(descHeapHandle, OKAY_DESCRIPTOR_APPEND, &currentMipUAVDesc, 1);
+			computeContext.transitionSubresource(pDXIntermediateTexture, i, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
 
+			float currentMipLevel = (float)i - 1;
+			memcpy(pMappedMipData, &currentMipLevel, sizeof(float));
 			pGraphicsComputeList->SetComputeRootConstantBufferView(1, cbAddress);
 
-			uint32_t mipWidth = textureDesc.Width / glm::pow(2, i);
-			uint32_t mipHeight = textureDesc.Height / glm::pow(2, i);
 
+			uint32_t mipWidth = (uint32_t)textureDesc.Width / (uint32_t)glm::pow(2, i);
+			uint32_t mipHeight = textureDesc.Height / (uint32_t)glm::pow(2, i);
 			pGraphicsComputeList->Dispatch(mipWidth / 16 + 1, mipHeight / 16 + 1, 1);
 
-			computeContext.transitionSubresource(pDXCopy, i, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+			computeContext.transitionSubresource(pDXIntermediateTexture, i, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
-			pMappedMipData += alignAddress64(sizeof(MipData), BUFFER_DATA_ALIGNMENT);
-			cbAddress += alignAddress64(sizeof(MipData), BUFFER_DATA_ALIGNMENT);
+			pMappedMipData += alignAddress64(sizeof(float), BUFFER_DATA_ALIGNMENT);
+			cbAddress += alignAddress64(sizeof(float), BUFFER_DATA_ALIGNMENT);
 		}
 
 		m_pRingBuffer->unmap(BUFFER_DATA_ALIGNMENT * (textureDesc.MipLevels - 1));
 
-		computeContext.transitionResource(pDXCopy, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
-		pGraphicsComputeList->CopyResource(pDXResource, pDXCopy);
+		computeContext.transitionResource(pDXIntermediateTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
+		computeContext.transitionResource(pDXResource, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COPY_DEST);
 
-		computeContext.transitionResource(pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_COMMON);
+		pGraphicsComputeList->CopyResource(pDXResource, pDXIntermediateTexture);
 
 		computeContext.flush();
 		computeContext.shutdown();
 
+		m_pCommandContext->transitionResource(pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
-		textureUploadBuffer.shutdown();
-		D3D12_RELEASE(pDXCopy);
-		D3D12_RELEASE(pPipelineState);
-		D3D12_RELEASE(pRootSignature);
-	}
-
-	void GPUResourceManager::validateResourceHandle(ResourceHandle handle)
-	{
-		OKAY_ASSERT(handle < (ResourceHandle)m_resources.size());
+		D3D12_RELEASE(pDXIntermediateTexture);
 	}
 }

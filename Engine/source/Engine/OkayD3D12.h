@@ -258,14 +258,14 @@ namespace Okay
 	constexpr D3D12_STATIC_SAMPLER_DESC createDefaultStaticPointSamplerDesc()
 	{
 		D3D12_STATIC_SAMPLER_DESC desc = {};
-		desc.Filter = D3D12_FILTER_ANISOTROPIC;
+		desc.Filter = D3D12_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
 		
 		desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 		desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
 
 		desc.MipLODBias = 0.f;
-		desc.MaxAnisotropy = 16;
+		desc.MaxAnisotropy = 1;
 		desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER; //?
 		desc.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_WHITE;
 		

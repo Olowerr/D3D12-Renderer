@@ -12,6 +12,7 @@ ConstantBuffer<MipData> mipData : register(b0, space0);
 Texture2D srvMip : register(t0, space0);
 
 // UAVs
+// Index 0 here is mip 1 (2nd largest), since the descriptorRange starts at mip 1
 RWTexture2D<unorm float4> uavMips[16] : register(u0, space0);
 
 // Samplers
@@ -28,8 +29,8 @@ void main(uint3 DTid : SV_DispatchThreadID)
         return;
     }
     
-    float2 uv = float2(DTid.xy) / (float2)mipSize;
-            
-    float3 color = srvMip.SampleLevel(sampy, uv, mipData.currentMipLevel - 1).rgb;
-    uavMips[mipData.currentMipLevel][DTid.xy] = float4(color, 1.f);
+    float2 uv = float2(DTid.xy + float2(0.5f, 0.5f)) / (float2) mipSize;
+
+    float3 colour = srvMip.SampleLevel(sampy, uv, mipData.currentMipLevel).rgb;
+    uavMips[mipData.currentMipLevel][DTid.xy] = float4(colour, 1.f);
 }

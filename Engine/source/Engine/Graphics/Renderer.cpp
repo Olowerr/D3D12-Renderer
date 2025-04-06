@@ -349,7 +349,9 @@ namespace Okay
 		rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 
-		D3D12_STATIC_SAMPLER_DESC defaultPointSampler = createDefaultStaticPointSamplerDesc();
+		D3D12_STATIC_SAMPLER_DESC samplerDesc = createDefaultStaticPointSamplerDesc();
+		samplerDesc.Filter = D3D12_FILTER_ANISOTROPIC;
+		samplerDesc.MaxAnisotropy = 4;
 
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
@@ -357,7 +359,7 @@ namespace Okay
 		rootSignatureDesc.pParameters = rootParams;
 
 		rootSignatureDesc.NumStaticSamplers = 1;
-		rootSignatureDesc.pStaticSamplers = &defaultPointSampler;
+		rootSignatureDesc.pStaticSamplers = &samplerDesc;
 
 
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = createDefaultGraphicsPipelineStateDesc();
