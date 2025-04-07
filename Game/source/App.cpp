@@ -31,6 +31,7 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 	}
 
 	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "quack.jpg");
+	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "CATt.jpg");
 }
 
 App::~App()

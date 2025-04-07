@@ -421,13 +421,16 @@ namespace Okay
 	{
 		m_materialTexturesDHH = m_descriptorHeapStore.createDescriptorHeap(50, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-		const Texture& texture = textures[0];
+		for (const Texture& texture : textures)
+		{
+			Allocation textureAlloc = m_gpuResourceManager.createTexture(texture.getWidth(), texture.getHeight(), MAX_MIP_LEVELS,
+				DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, texture.getTextureData());
 
-		Allocation textureAlloc = m_gpuResourceManager.createTexture(texture.getWidth(), texture.getHeight(), MAX_MIP_LEVELS,
-			DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, texture.getTextureData());
+			DescriptorDesc desc = m_gpuResourceManager.createDescriptorDesc(textureAlloc, OKAY_DESCRIPTOR_TYPE_SRV, true);
+			m_textureDescriptor = m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, OKAY_DESCRIPTOR_APPEND, &desc, 1);
+		}
 
-		DescriptorDesc desc = m_gpuResourceManager.createDescriptorDesc(textureAlloc, OKAY_DESCRIPTOR_TYPE_SRV, true);
-		m_textureDescriptor = m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, OKAY_DESCRIPTOR_APPEND, &desc, 1);
+		m_gpuResourceManager.generateMipMaps();
 	}
 
 	void Renderer::enableDebugLayer()

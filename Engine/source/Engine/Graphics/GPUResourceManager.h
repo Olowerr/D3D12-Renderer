@@ -69,6 +69,8 @@ namespace Okay
 
 		DescriptorDesc createDescriptorDesc(const Allocation& allocation, DescriptorType type, bool nullDesc);
 
+		void generateMipMaps();
+
 	private:
 		void updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData);
 		void updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData);
@@ -76,9 +78,8 @@ namespace Okay
 
 		void validateResourceHandle(ResourceHandle handle);
 
-		void initiateMipMapGeneration();
-		void generateMipMaps(ID3D12Resource* pDXResource);
-
+		ID3D12RootSignature* createMipMapRootSignature();
+		ID3D12PipelineState* createMipMapPSO(ID3D12RootSignature* pRootSignature);
 
 	private:
 		ID3D12Device* m_pDevice = nullptr;
@@ -91,8 +92,5 @@ namespace Okay
 
 		std::vector<Resource> m_resources;
 
-	private:
-		ID3D12RootSignature* m_pMipMapRootSignature = nullptr;
-		ID3D12PipelineState* m_pMipMapPSO = nullptr;
 	};
 }

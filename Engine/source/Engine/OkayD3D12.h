@@ -138,6 +138,38 @@ namespace Okay
 		return pRootSignature;
 	}
 
+	inline void copyDifferentTextures(ID3D12GraphicsCommandList* pCommandList, ID3D12Resource* pDest, ID3D12Resource* pSource, uint32_t srcWidth, uint32_t srcHeight)
+	{
+		D3D12_TEXTURE_COPY_LOCATION destLocation = {};
+		destLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		destLocation.pResource = pDest;
+
+		D3D12_TEXTURE_COPY_LOCATION srcLocation = {};
+		srcLocation.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+		srcLocation.pResource = pSource;
+
+		D3D12_BOX sourceBox = {};
+		sourceBox.left = 0;
+		sourceBox.top = 0;
+		sourceBox.right = srcWidth;
+		sourceBox.bottom = srcHeight;
+		sourceBox.front = 0;
+		sourceBox.back = 1;
+
+		uint32_t minMips = glm::min(pDest->GetDesc().MipLevels, pSource->GetDesc().MipLevels);
+
+		for (uint32_t i = 0; i < minMips; i++)
+		{
+			destLocation.SubresourceIndex = i;
+			srcLocation.SubresourceIndex = i;
+
+			pCommandList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, &sourceBox);
+
+			sourceBox.right /= 2;
+			sourceBox.bottom /= 2;
+		}
+	}
+
 	constexpr D3D12_BLEND_DESC createDefaultBlendDesc()
 	{
 		D3D12_BLEND_DESC desc = {};
