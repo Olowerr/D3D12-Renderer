@@ -91,6 +91,7 @@ namespace Okay
 	private:
 		D3D12_GPU_VIRTUAL_ADDRESS m_renderData;
 		RenderPass m_mainRenderPass;
+		DescriptorHeapHandle m_materialTexturesDHH = INVALID_DHH;
 
 		std::vector<DXMesh> m_dxMeshes;
 
@@ -98,8 +99,5 @@ namespace Okay
 		uint32_t m_activeDrawGroups = INVALID_UINT32;
 		std::vector<DrawGroup> m_drawGroups;
 
-	private: // temp
-		DescriptorHeapHandle m_materialTexturesDHH = INVALID_DHH;
-		Descriptor m_textureDescriptor;
 	};
 }

@@ -20,6 +20,8 @@
 namespace Okay
 {
 	typedef uint32_t AssetID;
+	constexpr AssetID INVALID_ASSET_ID = UINT32_MAX;
+
 	typedef std::filesystem::path FilePath;
 
 	constexpr uint16_t INVALID_UINT16 = UINT16_MAX;

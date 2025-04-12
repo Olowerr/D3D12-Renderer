@@ -47,6 +47,7 @@ namespace Okay
 
 	struct MeshRenderer
 	{
-		AssetID meshID = INVALID_UINT32;
+		AssetID meshID = INVALID_ASSET_ID;
+		AssetID textureID = INVALID_ASSET_ID;
 	};
 }

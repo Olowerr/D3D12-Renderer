@@ -165,8 +165,8 @@ namespace Okay
 
 			pCommandList->CopyTextureRegion(&destLocation, 0, 0, 0, &srcLocation, &sourceBox);
 
-			sourceBox.right /= 2;
-			sourceBox.bottom /= 2;
+			sourceBox.right = glm::max(sourceBox.right / 2, 1u);
+			sourceBox.bottom = glm::max(sourceBox.bottom / 2, 1u);
 		}
 	}
 

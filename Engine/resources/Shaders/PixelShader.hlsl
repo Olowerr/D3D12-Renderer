@@ -6,11 +6,13 @@ struct InputData
     float3 worldPosition : WORLD_POS;
     float3 worldNormal : WORLD_NORMAL;
     float2 uv : UV;
+    uint instanceID : SV_InstanceID;
 };
 
 struct ObjectData
 {
     float4x4 objectMatrix;
+    uint textureIdx;
 };
 
 
@@ -30,14 +32,16 @@ StructuredBuffer<ObjectData> objectDatas : register(t1, space0);
 
 
 // Textures
-Texture2D<unorm float4> testTexture : register(t2, space0);
+Texture2D<unorm float4> textures[256] : register(t2, space0);
 
 
 // Samplers
-SamplerState pointSampler : register(s0, space0);
+SamplerState sampy : register(s0, space0);
 
 
 float4 main(InputData input) : SV_TARGET
 {
-    return float4(testTexture.Sample(pointSampler, input.uv).rgb, 1.f);
+    uint textureIdx = objectDatas[input.instanceID].textureIdx;
+
+    return float4(textures[textureIdx].Sample(sampy, input.uv).rgb, 1.f);
 }

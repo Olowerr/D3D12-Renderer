@@ -232,6 +232,34 @@ namespace Okay
 
 	void GPUResourceManager::generateMipMaps()
 	{
+		/*
+			In DirectX 12 we need to generate the content of the mipMaps manually.
+
+			To do this, we create an intermediate UAV texture that is the max size of all textures.
+			For each texture we then copy it's content to the intermediate, loop through the mip maps and down sample using a CS.
+			After all mipmaps have been proccessed, we copy the contents of the intermediate to the original texture.
+
+			Essentially:
+
+			* Create intermediate UAV texture based on maxTextureDims & largestMipDepth
+
+			For each texture:
+				* Copy contents into intermediate
+				* Bind SRV to mip0 of intermediate
+				
+				For each mip (starting at mip1):
+					* Create UAV to the mip
+					* Dispatch CS that will sample mip i - 1 & write to the UAV
+				
+				* Copy intermediate to original texture
+			
+			Note:
+			The reason that i - 1 is used as the index for both the SRV & UAV is because we want to sample the parent mip,
+			and the descriptor table starts at mip1. Meaning in the CS that uavMips[0] refers to mip1.
+		*/
+
+
+		// Flush to ensure that texture content is uploaded to the GPU before creating a new commandList that needs to access the data.
 		m_pCommandContext->flush();
 
 

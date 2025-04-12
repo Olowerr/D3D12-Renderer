@@ -15,6 +15,7 @@ namespace Okay
 	struct GPUObjectData
 	{
 		glm::mat4 objectMatrix = glm::mat4(1.f);
+		uint32_t textureIdx = 0;
 	};
 
 	void Renderer::initialize(const Window& window)
@@ -133,7 +134,7 @@ namespace Okay
 		pCommandList->SetDescriptorHeaps(1, &pMaterialDXDescHeap);
 
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_renderData);
-		pCommandList->SetGraphicsRootDescriptorTable(3, m_descriptorHeapStore.getGPUHandle(m_textureDescriptor));
+		pCommandList->SetGraphicsRootDescriptorTable(3, pMaterialDXDescHeap->GetGPUDescriptorHandleForHeapStart());
 
 		// Render Objects
 
@@ -151,10 +152,11 @@ namespace Okay
 
 			for (entt::entity entity : drawGroup.entities)
 			{
-				const Transform& transform = meshRendererView.get<Transform>(entity);
+				auto [meshRenderer, transform] = meshRendererView[entity];
 
 				GPUObjectData* pObjectData = (GPUObjectData*)pMappedPtr;
 				pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
+				pObjectData->textureIdx = meshRenderer.textureID;
 
 				pMappedPtr += sizeof(GPUObjectData);
 			}
@@ -336,13 +338,14 @@ namespace Okay
 		rootParams[2].Descriptor.RegisterSpace = 0;
 		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 		
-		// Testing texture
+		// Textures
 		D3D12_DESCRIPTOR_RANGE range = {};
 		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-		range.NumDescriptors = 1;
+		range.NumDescriptors = 256; // At this point we don't know the real number of textures, so just setting a high upper limit
 		range.BaseShaderRegister = 2;
 		range.RegisterSpace = 0;
 		range.OffsetInDescriptorsFromTableStart = 0;
+
 		rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 		rootParams[3].DescriptorTable.NumDescriptorRanges = 1;
 		rootParams[3].DescriptorTable.pDescriptorRanges = &range;
@@ -419,7 +422,7 @@ namespace Okay
 
 	void Renderer::preProcessTextures(const std::vector<Texture>& textures)
 	{
-		m_materialTexturesDHH = m_descriptorHeapStore.createDescriptorHeap(50, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		m_materialTexturesDHH = m_descriptorHeapStore.createDescriptorHeap((uint32_t)textures.size(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 		for (const Texture& texture : textures)
 		{
@@ -427,7 +430,7 @@ namespace Okay
 				DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, texture.getTextureData());
 
 			DescriptorDesc desc = m_gpuResourceManager.createDescriptorDesc(textureAlloc, OKAY_DESCRIPTOR_TYPE_SRV, true);
-			m_textureDescriptor = m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, OKAY_DESCRIPTOR_APPEND, &desc, 1);
+			m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, OKAY_DESCRIPTOR_APPEND, &desc, 1);
 		}
 
 		m_gpuResourceManager.generateMipMaps();
