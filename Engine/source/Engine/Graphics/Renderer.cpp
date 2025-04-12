@@ -140,8 +140,8 @@ namespace Okay
 
 		assignObjectDrawGroups(scene);
 
-		uint8_t* pMappedPtr = m_ringBuffer.map();
-		D3D12_GPU_VIRTUAL_ADDRESS drawGroupVirtaulAddress = m_ringBuffer.getCurrentGPUAddress();
+		uint8_t* pMappedObjectDatas = m_ringBuffer.map();
+		D3D12_GPU_VIRTUAL_ADDRESS drawGroupObjectDatasVA = m_ringBuffer.getCurrentGPUAddress();
 		uint64_t ringBufferBytesWritten = 0;
 
 		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
@@ -154,16 +154,16 @@ namespace Okay
 			{
 				auto [meshRenderer, transform] = meshRendererView[entity];
 
-				GPUObjectData* pObjectData = (GPUObjectData*)pMappedPtr;
+				GPUObjectData* pObjectData = (GPUObjectData*)pMappedObjectDatas;
 				pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
 				pObjectData->textureIdx = meshRenderer.textureID;
 
-				pMappedPtr += sizeof(GPUObjectData);
+				pMappedObjectDatas += sizeof(GPUObjectData);
 			}
 
 			const DXMesh& dxMesh = m_dxMeshes[drawGroup.dxMeshId];
 
-			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroupVirtaulAddress);
+			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroupObjectDatasVA);
 
 			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticies);
 			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
@@ -171,7 +171,7 @@ namespace Okay
 			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
 
 			uint64_t bytesWritten = drawGroup.entities.size() * sizeof(GPUObjectData);
-			drawGroupVirtaulAddress += bytesWritten;
+			drawGroupObjectDatasVA += bytesWritten;
 			ringBufferBytesWritten += bytesWritten;
 
 			drawGroup.entities.clear();
