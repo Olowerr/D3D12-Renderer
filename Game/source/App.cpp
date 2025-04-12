@@ -10,9 +10,9 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 
 	m_scene.setActiveCamera(m_camEntity);
 
-	m_resourceManager.loadMesh(FilePath("resources") / "Meshes" / "Cube.fbx");
-	m_resourceManager.loadMesh(FilePath("resources") / "Meshes" / "dragon_80K.obj");
-	m_resourceManager.loadMesh(FilePath("resources") / "Meshes" / "sphere.fbx");
+	m_resourceManager.loadMesh(FilePath("resources") / "meshes" / "Cube.fbx");
+	m_resourceManager.loadMesh(FilePath("resources") / "meshes" / "dragon_80K.obj");
+	m_resourceManager.loadMesh(FilePath("resources") / "meshes" / "sphere.fbx");
 
 	uint32_t numObjects = 3;
 	float spaceBetween = 2.f;
@@ -32,15 +32,15 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 		}
 	}
 
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "quack.jpg");
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "CATt.jpg");
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "bigward2.jpg");
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "CATAC.jpg");
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "denise.jpg");
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "deniseCropped.jpg");
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "ludde.png");
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "sus.png");
-	m_resourceManager.loadTexture(FilePath("resources") / "Textures" / "whenThe.png");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "quack.jpg");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "CATt.jpg");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "bigward2.jpg");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "CATAC.jpg");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "denise.jpg");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "deniseCropped.jpg");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "ludde.png");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "sus.png");
+	m_resourceManager.loadTexture(FilePath("resources") / "textures" / "whenThe.png");
 }
 
 App::~App()

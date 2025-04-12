@@ -29,7 +29,7 @@
 
 namespace Okay
 {
-	inline const FilePath SHADER_PATH = FilePath("..") / "Engine" / "resources" / "Shaders";
+	inline const FilePath SHADER_PATH = FilePath("..") / "Engine" / "resources" / "shaders";
 
 	constexpr uint64_t alignAddress64(uint64_t adress, uint32_t alignment)
 	{
