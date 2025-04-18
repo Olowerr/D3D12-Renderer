@@ -33,7 +33,7 @@ namespace Okay
 
 		createSwapChain(pFactory, window);
 
-		m_ringBuffer.initialize(m_pDevice, 10'000'000);
+		m_ringBuffer.initialize(m_pDevice, 50'000'000);
 		m_descriptorHeapStore.initialize(m_pDevice, 50);
 
 		m_gpuResourceManager.initialize(m_pDevice, m_commandContext, m_ringBuffer, m_descriptorHeapStore);

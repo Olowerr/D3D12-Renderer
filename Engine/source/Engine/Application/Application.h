@@ -17,8 +17,11 @@ namespace Okay
 
 		void run();
 
+	protected:
 		// onStart, onEnd
 		virtual void onUpdate(TimeStep dt) = 0;
+
+		void createEntitesFromFile(FilePath path);
 
 	protected:
 		Scene m_scene;

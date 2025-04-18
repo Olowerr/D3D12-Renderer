@@ -102,7 +102,7 @@ namespace Okay
 		HRESULT hr = D3DCompileFromFile(path.c_str(), nullptr, nullptr, "main", version.data(), flags1, 0, pShaderBlob, &pErrorBlob);
 		if (FAILED(hr))
 		{
-			const char* pErrorMsg = pErrorBlob ? (const char*)pErrorBlob->GetBufferPointer() : "No errors produced, file might have been found.";
+			const char* pErrorMsg = pErrorBlob ? (const char*)pErrorBlob->GetBufferPointer() : "No errors produced, file might not have been found.";
 
 			printf("Shader Compilation failed\n    Path: %ls\n    Error: %s\n", path.c_str(), pErrorMsg);
 			OKAY_ASSERT(false);

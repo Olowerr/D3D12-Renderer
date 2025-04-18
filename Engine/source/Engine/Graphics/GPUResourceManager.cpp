@@ -259,21 +259,6 @@ namespace Okay
 		*/
 
 
-		// Flush to ensure that texture content is uploaded to the GPU before creating a new commandList that needs to access the data.
-		m_pCommandContext->flush();
-
-
-		ID3D12RootSignature* pMipMapRootSignature = createMipMapRootSignature();
-		ID3D12PipelineState* pMipMapPSO = createMipMapPSO(pMipMapRootSignature);
-
-		CommandContext computeContext;
-		computeContext.initialize(m_pDevice, D3D12_COMMAND_LIST_TYPE_COMPUTE);
-		ID3D12GraphicsCommandList* pGraphicsComputeList = computeContext.getCommandList();
-
-		pGraphicsComputeList->SetComputeRootSignature(pMipMapRootSignature);
-		pGraphicsComputeList->SetPipelineState(pMipMapPSO);
-
-
 		uint16_t totalMipMaps = 0;
 		uint16_t largetMipDepth = 0;
 		glm::uvec2 largestTextureDims = glm::uvec2(0, 0);
@@ -285,12 +270,21 @@ namespace Okay
 			{
 				continue;
 			}
-			
+
 			largestTextureDims = glm::max(largestTextureDims, glm::uvec2(textureDesc.Width, textureDesc.Height));
 			largetMipDepth = glm::max(largetMipDepth, textureDesc.MipLevels);
 
 			totalMipMaps += textureDesc.MipLevels;
 		}
+
+		if (!totalMipMaps)
+		{
+			return;
+		}
+
+		
+		// Flush to ensure that texture content is uploaded to the GPU before executing a new commandList that needs to access the data.
+		m_pCommandContext->flush();
 
 
 		D3D12_RESOURCE_DESC intermediateTextureDesc = m_resources[0].pDXResource->GetDesc();
@@ -315,6 +309,17 @@ namespace Okay
 
 		ID3D12Resource* pDXIntermediateTexture = nullptr;
 		DX_CHECK(m_pDevice->CreateCommittedResource(&intermediateHeapProperties, D3D12_HEAP_FLAG_NONE, &intermediateTextureDesc, D3D12_RESOURCE_STATE_COPY_SOURCE, nullptr, IID_PPV_ARGS(&pDXIntermediateTexture)));
+
+
+		ID3D12RootSignature* pMipMapRootSignature = createMipMapRootSignature();
+		ID3D12PipelineState* pMipMapPSO = createMipMapPSO(pMipMapRootSignature);
+
+		CommandContext computeContext;
+		computeContext.initialize(m_pDevice, D3D12_COMMAND_LIST_TYPE_COMPUTE);
+		ID3D12GraphicsCommandList* pGraphicsComputeList = computeContext.getCommandList();
+
+		pGraphicsComputeList->SetComputeRootSignature(pMipMapRootSignature);
+		pGraphicsComputeList->SetPipelineState(pMipMapPSO);
 
 
 		D3D12_GPU_VIRTUAL_ADDRESS cbAddress = m_pRingBuffer->getCurrentGPUAddress();

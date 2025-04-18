@@ -8,6 +8,14 @@
 
 namespace Okay
 {
+	struct LoadedObject
+	{
+		AssetID meshID = INVALID_ASSET_ID;
+		AssetID textureID = INVALID_ASSET_ID;
+
+		glm::mat4 transformMatrix = glm::mat4(1.f);
+	};
+
 	class ResourceManager
 	{
 	public:
@@ -16,6 +24,8 @@ namespace Okay
 
 		AssetID loadMesh(FilePath path);
 		AssetID loadTexture(FilePath path);
+
+		void loadObjects(FilePath path, std::vector<LoadedObject>& loadedObjects);
 
 		void unloadCPUData();
 
@@ -37,8 +47,6 @@ namespace Okay
 
 		template<typename Asset>
 		inline const std::vector<Asset>& getAssetsConst() const;
-
-		void importMeshData(FilePath path, MeshData& outData);
 
 	private:
 		std::vector<Mesh> m_meshes;

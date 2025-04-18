@@ -7,6 +7,7 @@
 #endif
 
 #include "glm/gtx/quaternion.hpp"
+#include "glm/gtx/matrix_decompose.hpp"
 
 namespace Okay
 {
@@ -31,12 +32,23 @@ namespace Okay
 		inline glm::vec3 forwardVec() const { return glm::normalize(getMatrix()[2]); }
 		inline glm::vec3 rightVec() const { return glm::normalize(getMatrix()[0]); }
 		inline glm::vec3 upVec() const { return glm::normalize(getMatrix()[1]); }
+
+		inline void setFromMatrix(const glm::mat4& matrix)
+		{
+			glm::quat rotationQuat = {};
+			glm::vec3 skew = {};
+			glm::vec4 perspective = {};
+
+			glm::decompose(matrix, scale, rotationQuat, position, skew, perspective);
+
+			rotation = glm::degrees(glm::eulerAngles(rotationQuat));
+		}
 	};
 
 	struct Camera
 	{
-		float nearZ = 0.1f;
-		float farZ = 1000.f;
+		float nearZ = 1.f;
+		float farZ = 1500.f;
 		float fov = 90.f;
 
 		inline glm::mat4 getProjectionMatrix(float width, float height) const

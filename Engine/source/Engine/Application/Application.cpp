@@ -38,4 +38,21 @@ namespace Okay
 			m_renderer.render(m_scene);
 		}
 	}
+
+	void Application::createEntitesFromFile(FilePath path)
+	{
+		std::vector<LoadedObject> objects;
+		m_resourceManager.loadObjects(path, objects);
+
+		for (LoadedObject& objectData : objects)
+		{
+			Entity entity = m_scene.createEntity();
+			
+			entity.getComponent<Transform>().setFromMatrix(objectData.transformMatrix);
+
+			MeshRenderer& meshRenderer = entity.addComponent<MeshRenderer>();
+			meshRenderer.meshID = objectData.meshID;
+			meshRenderer.textureID = objectData.textureID;
+		}
+	}
 }
