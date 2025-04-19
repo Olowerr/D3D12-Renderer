@@ -84,9 +84,7 @@ namespace Okay
 		DescriptorHeapStore m_descriptorHeapStore;
 		RingBuffer m_ringBuffer;
 
-		uint32_t m_cbvSrvUavDescriptorSize = INVALID_UINT32;
 		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
-		uint32_t m_dsvDescriptorSize = INVALID_UINT32;
 
 	private:
 		D3D12_GPU_VIRTUAL_ADDRESS m_renderData;
