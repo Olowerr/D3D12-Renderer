@@ -48,12 +48,12 @@ namespace Okay
 	struct Camera
 	{
 		float nearZ = 1.f;
-		float farZ = 1500.f;
+		float farZ = 5000.f;
 		float fov = 90.f;
 
 		inline glm::mat4 getProjectionMatrix(float width, float height) const
 		{
-			return glm::perspectiveFovLH_ZO(fov, width, height, nearZ, farZ);
+			return glm::perspectiveFovLH_ZO(glm::radians(fov), width, height, nearZ, farZ);
 		}
 	};
 

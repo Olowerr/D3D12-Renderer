@@ -11,6 +11,9 @@ public:
 	virtual void onUpdate(Okay::TimeStep dt) override;
 
 private:
+	void updateCamera(Okay::TimeStep dt);
+
+private:
 	Okay::Entity m_camEntity;
 
 };

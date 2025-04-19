@@ -20,11 +20,59 @@ App::~App()
 
 void App::onUpdate(TimeStep dt)
 {
+	updateCamera(dt);
+}
+
+void App::updateCamera(TimeStep dt)
+{
+	if (Input::isKeyPressed(Key::E))
+	{
+		MouseMode newMode = Input::getMouseMode() == MouseMode::LOCKED ? MouseMode::NORMAL : MouseMode::LOCKED;
+		Input::setMouseMode(newMode);
+	}
+
+	if (Input::getMouseMode() == MouseMode::NORMAL)
+	{
+		return;
+	}
+
 	Transform& camTransform = m_camEntity.getComponent<Transform>();
 
-	camTransform.rotation.x = 20.f;
-	camTransform.rotation.y += 45.f * dt;
+	float camMoveSpeed = 300.f;
+	float camRotSpeed = 10.f;
 
-	//camTransform.position = camTransform.forwardVec() * -6.f;
-	camTransform.position.y = 250.f;
+
+	// Movement
+
+	float forwardDir = (float)Input::isKeyDown(Key::W) - (float)Input::isKeyDown(Key::S);
+	float rightDir = (float)Input::isKeyDown(Key::D) - (float)Input::isKeyDown(Key::A);
+	float upDir = (float)Input::isKeyDown(Key::SPACE) - (float)Input::isKeyDown(Key::L_SHIFT);
+
+	glm::vec3 moveDir = glm::vec3(0.f);
+
+	if (forwardDir)
+	{
+		moveDir += camTransform.forwardVec() * forwardDir;
+	}
+	if (rightDir)
+	{
+		moveDir += camTransform.rightVec() * rightDir;
+	}
+	if (upDir)
+	{
+		moveDir += camTransform.upVec() * upDir;
+	}
+
+	if (forwardDir || rightDir || upDir)
+	{
+		camTransform.position += glm::normalize(moveDir) * camMoveSpeed * dt;
+	}
+
+
+	// Rotation
+
+	glm::vec2 mouseDelta = Input::getMouseDelta();
+
+	camTransform.rotation.y += mouseDelta.x * camRotSpeed * dt;
+	camTransform.rotation.x += mouseDelta.y * camRotSpeed * dt;
 }

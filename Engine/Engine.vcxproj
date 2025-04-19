@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="source\Engine\Application\Input.h" />
+    <ClInclude Include="source\Engine\Application\KeyCodes.h" />
     <ClInclude Include="source\Engine\Application\Time.h" />
     <ClInclude Include="source\Engine\Graphics\DescriptorHeapStore.h" />
     <ClInclude Include="source\Engine\Graphics\HeapStore.h" />
@@ -39,6 +41,7 @@
     <ClInclude Include="source\Engine\Okay.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="source\Engine\Application\Input.cpp" />
     <ClCompile Include="source\Engine\Graphics\DescriptorHeapStore.cpp" />
     <ClCompile Include="source\Engine\Graphics\HeapStore.cpp" />
     <ClCompile Include="source\Engine\Graphics\CommandContext.cpp" />

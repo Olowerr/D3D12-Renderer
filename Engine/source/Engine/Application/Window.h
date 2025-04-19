@@ -1,10 +1,10 @@
 #pragma once
-
 #include "Engine/Okay.h"
+#include "Input.h"
+
+#include "GLFW/glfw3.h
 
 #include <windows.h>
-#include "GLFW/glfw3.h"
-
 #include <string_view>
 
 namespace Okay
@@ -12,6 +12,8 @@ namespace Okay
 	class Window
 	{
 	public:
+		friend class Input;
+
 		Window() = default;
 		virtual ~Window();
 
@@ -24,7 +26,10 @@ namespace Okay
 		HWND getHWND() const;
 
 	private:
+		void setInputMode(MouseMode mode);
+		MouseMode getInputMode();
 
+	private:
 		GLFWwindow* m_pGlfwWindow = nullptr;
 
 	};

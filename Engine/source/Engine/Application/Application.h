@@ -5,6 +5,7 @@
 #include "Engine/Graphics/Renderer.h"
 #include "Engine/Resources/ResourceManager.h"
 
+#include "Input.h"
 #include "Time.h"
 
 namespace Okay

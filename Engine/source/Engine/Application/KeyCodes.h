@@ -1,0 +1,37 @@
+#pragma once
+
+#include "GLFW/glfw3.h"
+
+namespace Okay
+{
+	enum MouseMode
+	{
+		NORMAL = GLFW_CURSOR_NORMAL,
+		LOCKED = GLFW_CURSOR_DISABLED,
+	};
+
+	enum MouseButton
+	{
+		LEFT = GLFW_MOUSE_BUTTON_LEFT,
+		RIGHT = GLFW_MOUSE_BUTTON_RIGHT,
+	};
+
+	enum Key
+	{
+		W = GLFW_KEY_W,
+		A = GLFW_KEY_A,
+		S = GLFW_KEY_S,
+		D = GLFW_KEY_D,
+	
+		E = GLFW_KEY_E,
+		Q = GLFW_KEY_Q,
+
+		SPACE = GLFW_KEY_SPACE,
+		L_SHIFT = GLFW_KEY_LEFT_SHIFT,
+
+		UP_ARROW = GLFW_KEY_UP,
+		LEFT_ARROW = GLFW_KEY_LEFT,
+		DOWN_ARROW = GLFW_KEY_DOWN,
+		RIGHT_ARROW = GLFW_KEY_RIGHT,
+	};
+}
