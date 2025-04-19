@@ -6,7 +6,7 @@ namespace Okay
 {
 	enum MouseMode
 	{
-		NORMAL = GLFW_CURSOR_NORMAL,
+		FREE = GLFW_CURSOR_NORMAL,
 		LOCKED = GLFW_CURSOR_DISABLED,
 	};
 

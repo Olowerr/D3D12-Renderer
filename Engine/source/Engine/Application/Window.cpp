@@ -90,7 +90,7 @@ namespace Okay
 	void Window::setInputMode(MouseMode mode)
 	{
 		// For now mouse mode should not be changed to anything but these
-		OKAY_ASSERT(mode == MouseMode::NORMAL || mode == MouseMode::LOCKED);
+		OKAY_ASSERT(mode == MouseMode::FREE || mode == MouseMode::LOCKED);
 
 		glfwSetInputMode(m_pGlfwWindow, GLFW_CURSOR, (int)mode);
 	}

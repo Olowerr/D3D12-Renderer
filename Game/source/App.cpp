@@ -27,11 +27,11 @@ void App::updateCamera(TimeStep dt)
 {
 	if (Input::isKeyPressed(Key::E))
 	{
-		MouseMode newMode = Input::getMouseMode() == MouseMode::LOCKED ? MouseMode::NORMAL : MouseMode::LOCKED;
+		MouseMode newMode = Input::getMouseMode() == MouseMode::LOCKED ? MouseMode::FREE : MouseMode::LOCKED;
 		Input::setMouseMode(newMode);
 	}
 
-	if (Input::getMouseMode() == MouseMode::NORMAL)
+	if (Input::getMouseMode() == MouseMode::FREE)
 	{
 		return;
 	}
