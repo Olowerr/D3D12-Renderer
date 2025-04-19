@@ -2,7 +2,7 @@
 #include "Engine/Okay.h"
 #include "Input.h"
 
-#include "GLFW/glfw3.h
+#include "GLFW/glfw3.h"
 
 #include <windows.h>
 #include <string_view>
