@@ -60,23 +60,35 @@ float4 main(InputData input) : SV_TARGET
 {
     uint diffuseTextureIdx = objectDatas[input.instanceID].textureIdx;
     
-    float3 diffuse = textures[diffuseTextureIdx].Sample(sampy, input.uv).rgb;
-    float3 ambient = diffuse * 0.2f;
+    float3 materialDiffuse = textures[diffuseTextureIdx].Sample(sampy, input.uv).rgb;
+    float3 worldPosToCamera = normalize(cameraPos - input.worldPosition);
+
+    float3 ambientLight = float3(0.2f, 0.2, 0.2f);
+    float3 diffuseLight = float3(0.f, 0.f, 0.f);
+    float3 specularLight = float3(0.f, 0.f, 0.f);
+    float specularExpontent = 50.f; // temp
     
-    float3 light = float3(0.f, 0.f, 0.f);
     
     uint i = 0;
-    for (i = 0; i < numPointlights; i++)
+    for (i = 0; i < 0; i++)
     {
         PointLight pointLight = pointLights[i];
         
         float3 worldToLight = pointLight.position - input.worldPosition;
+
         float distance = length(worldToLight);
+        worldToLight /= distance;
         
-        float dotty = max(dot(worldToLight / distance, input.worldNormal), 0.f);
+        float dotty = max(dot(worldToLight, input.worldNormal), 0.f);
         float attentuation = 1.f / (1.f + pointLight.attenuation.x + pointLight.attenuation.y * distance * distance);
         
-        light += pointLight.colour * pointLight.intensity * dotty * attentuation;
+        diffuseLight += pointLight.colour * pointLight.intensity * dotty * attentuation;
+        
+        
+        float3 lightReflection = reflect(-worldToLight, input.worldNormal);
+        float specularIntensity = max(dot(lightReflection, worldPosToCamera), 0.f);
+        
+        specularLight += pointLight.colour * pointLight.intensity * pow(specularIntensity, specularExpontent) * attentuation;
     }
     
     for (i = 0; i < numDirectionallights; i++)
@@ -84,8 +96,14 @@ float4 main(InputData input) : SV_TARGET
         DirectionalLight dirLight = directionalLights[i];
         
         float dotty = max(dot(dirLight.direction, input.worldNormal), 0.f);
-        light += dirLight.colour * dirLight.intensity * dotty;
+        diffuseLight += dirLight.colour * dirLight.intensity * dotty;
+       
+
+        float3 lightReflection = reflect(-dirLight.direction, input.worldNormal);
+        float specularIntensity = max(dot(lightReflection, worldPosToCamera), 0.f);
+        
+        specularLight += dirLight.colour * dirLight.intensity * pow(specularIntensity, specularExpontent);
     }
     
-    return float4(light * diffuse + ambient, 1.f);
+    return float4(materialDiffuse * (ambientLight + diffuseLight + specularLight), 1.f);
 }

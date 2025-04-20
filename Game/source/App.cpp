@@ -16,7 +16,7 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 	pointLight.intensity = 10.f;
 
 	Entity sun = m_scene.createEntity();
-	sun.getComponent<Transform>().rotation = glm::vec3(45.f, -46.f, 45.f);
+	sun.getComponent<Transform>().rotation = glm::vec3(45.f, 45.f, 0.f);
 
 	DirectionalLight& dirLight = sun.addComponent<DirectionalLight>();
 	dirLight.colour = glm::vec3(246.f, 163.f, 22.f) / 255.f;
