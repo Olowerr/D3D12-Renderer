@@ -70,7 +70,7 @@ float4 main(InputData input) : SV_TARGET
     
     
     uint i = 0;
-    for (i = 0; i < 0; i++)
+    for (i = 0; i < numPointlights; i++)
     {
         PointLight pointLight = pointLights[i];
         
