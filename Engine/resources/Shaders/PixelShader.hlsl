@@ -23,6 +23,13 @@ struct PointLight
     float2 attenuation;
 };
 
+struct DirectionalLight
+{
+    float3 direction;
+    float3 colour;
+    float intensity;
+};
+
 
 // CBuffers
 cbuffer RenderDataCBuffer : register(b0, space0)
@@ -31,17 +38,18 @@ cbuffer RenderDataCBuffer : register(b0, space0)
     float3 cameraPos;
     uint numPointlights;
     float3 cameraDir;
-    float pad1;
+    uint numDirectionallights;
 }
 
 
 // Structured Buffers
 StructuredBuffer<ObjectData> objectDatas : register(t1, space0);
-StructuredBuffer<PointLight> pointLights : register(t2, space0);
+StructuredBuffer<PointLight> pointLights : register(t3, space0);
+StructuredBuffer<DirectionalLight> directionalLights : register(t4, space0);
 
 
 // Textures
-Texture2D<unorm float4> textures[256] : register(t3, space0);
+Texture2D<unorm float4> textures[256] : register(t2, space1);
 
 
 // Samplers
@@ -55,19 +63,29 @@ float4 main(InputData input) : SV_TARGET
     float3 diffuse = textures[diffuseTextureIdx].Sample(sampy, input.uv).rgb;
     float3 ambient = diffuse * 0.2f;
     
+    float3 light = float3(0.f, 0.f, 0.f);
+    
     uint i = 0;
     for (i = 0; i < numPointlights; i++)
     {
-        PointLight light = pointLights[i];
+        PointLight pointLight = pointLights[i];
         
-        float3 worldToLight = light.position - input.worldPosition;
+        float3 worldToLight = pointLight.position - input.worldPosition;
         float distance = length(worldToLight);
         
-        float dotty = dot(worldToLight / distance, input.worldNormal);
-        float attentuation = 1.f / (1.f + light.attenuation.x + light.attenuation.y * distance * distance);
+        float dotty = max(dot(worldToLight / distance, input.worldNormal), 0.f);
+        float attentuation = 1.f / (1.f + pointLight.attenuation.x + pointLight.attenuation.y * distance * distance);
         
-        diffuse *= light.colour * light.intensity * dotty * attentuation;
+        light += pointLight.colour * pointLight.intensity * dotty * attentuation;
     }
-
-    return float4(ambient + diffuse, 1.f);
+    
+    for (i = 0; i < numDirectionallights; i++)
+    {
+        DirectionalLight dirLight = directionalLights[i];
+        
+        float dotty = max(dot(dirLight.direction, input.worldNormal), 0.f);
+        light += dirLight.colour * dirLight.intensity * dotty;
+    }
+    
+    return float4(light * diffuse + ambient, 1.f);
 }

@@ -5,6 +5,8 @@ using namespace Okay;
 App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight)
 	:Application(windowName, windowWidth, windowHeight)
 {
+	createEntitesFromFile(FilePath("resources") / "sponza" / "sponza.obj", 0.07f);
+
 	m_camEntity = m_scene.createEntity();
 	m_camEntity.addComponent<Camera>();
 	m_scene.setActiveCamera(m_camEntity);
@@ -13,7 +15,12 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 	pointLight.colour = glm::vec3(0.9f, 0.2f, 0.4f);
 	pointLight.intensity = 10.f;
 
-	createEntitesFromFile(FilePath("resources") / "sponza" / "sponza.obj", 0.07f);
+	Entity sun = m_scene.createEntity();
+	sun.getComponent<Transform>().rotation = glm::vec3(45.f, -46.f, 45.f);
+
+	DirectionalLight& dirLight = sun.addComponent<DirectionalLight>();
+	dirLight.colour = glm::vec3(246.f, 163.f, 22.f) / 255.f;
+	dirLight.intensity = 1.f;
 }
 
 App::~App()

@@ -69,4 +69,10 @@ namespace Okay
 		float intensity = 1.f;
 		glm::vec2 attenuation = glm::vec2(0.f, 1.f);
 	};
+
+	struct DirectionalLight
+	{
+		glm::vec3 colour = glm::vec3(1.f);
+		float intensity = 1.f;
+	};
 }

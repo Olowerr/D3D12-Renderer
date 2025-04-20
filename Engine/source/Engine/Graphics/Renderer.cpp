@@ -9,7 +9,7 @@ namespace Okay
 		glm::vec3 cameraPos = glm::vec3(0.f);
 		uint32_t numPointLigts = 0;
 		glm::vec3 cameraDir = glm::vec3(0.f);
-		float pad1;
+		uint32_t numDirectionalLigts = 0;
 	};
 
 	struct GPUObjectData
@@ -24,6 +24,12 @@ namespace Okay
 		PointLight lightData;
 	};
 
+	struct GPUDirectionalLight
+	{
+		glm::vec3 direction = glm::vec3(0.f);
+		DirectionalLight lightData;
+	};
+	
 	void Renderer::initialize(const Window& window)
 	{
 #ifndef NDEBUG
@@ -100,30 +106,56 @@ namespace Okay
 		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
 		uint64_t writtenBytes = 0;
 
-		m_pointLights = m_ringBuffer.getCurrentGPUAddress();
+		m_pointLightsGVA = m_ringBuffer.getCurrentGPUAddress();
 
 		auto pointLightView = scene.getRegistry().view<PointLight, Transform>();
-		uint32_t i = 0;
 		for (entt::entity entity : pointLightView)
 		{
 			auto [pointLight, transform] = pointLightView[entity];
 
-			GPUPointLight* pGPUPointLight = (GPUPointLight*)pMappedRingBuffer + i++;
+			GPUPointLight* pGPUPointLight = (GPUPointLight*)pMappedRingBuffer;
 
 			pGPUPointLight->position = transform.position;
 			pGPUPointLight->lightData = pointLight;
+
+			pMappedRingBuffer += sizeof(GPUPointLight);
 		}
 		writtenBytes += alignAddress64(pointLightView.size_hint() * sizeof(GPUPointLight), BUFFER_DATA_ALIGNMENT);
+		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
+
+
+		m_directionalLightsGVA = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
+
+		auto directionalLightView = scene.getRegistry().view<DirectionalLight, Transform>();
+		for (entt::entity entity : directionalLightView)
+		{
+			auto [directionalLight, transform] = directionalLightView[entity];
+
+			GPUDirectionalLight* pGPUPointLight = (GPUDirectionalLight*)pMappedRingBuffer;
+
+			pGPUPointLight->direction = -transform.forwardVec();
+			pGPUPointLight->lightData = directionalLight;
+
+			pMappedRingBuffer += sizeof(DirectionalLight);
+		}
+		writtenBytes += alignAddress64(directionalLightView.size_hint() * sizeof(DirectionalLight), BUFFER_DATA_ALIGNMENT);
+		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
+
 
 		GPURenderData renderData{};
 		renderData.cameraPos = camTransform.position;
 		renderData.cameraDir = camTransform.forwardVec();
 		renderData.viewProjMatrix = glm::transpose(cameraComp.getProjectionMatrix(m_viewport.Width, m_viewport.Height) * camTransform.getViewMatrix());
-		renderData.numPointLigts = (uint32_t)pointLightView.size_hint();
 
-		m_renderData = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
-		memcpy(pMappedRingBuffer + writtenBytes, &renderData, sizeof(GPURenderData));
+		renderData.numPointLigts = (uint32_t)pointLightView.size_hint();
+		renderData.numDirectionalLigts = (uint32_t)directionalLightView.size_hint();
+
+		m_renderDataGVA = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
+		memcpy(pMappedRingBuffer, &renderData, sizeof(GPURenderData));
+
 		writtenBytes += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
+		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
+
 
 		m_ringBuffer.unmap(writtenBytes);
 	}
@@ -160,9 +192,10 @@ namespace Okay
 		ID3D12DescriptorHeap* pMaterialDXDescHeap = m_descriptorHeapStore.getDXDescriptorHeap(m_materialTexturesDHH);
 		pCommandList->SetDescriptorHeaps(1, &pMaterialDXDescHeap);
 
-		pCommandList->SetGraphicsRootConstantBufferView(0, m_renderData);
+		pCommandList->SetGraphicsRootConstantBufferView(0, m_renderDataGVA);
 		pCommandList->SetGraphicsRootDescriptorTable(3, pMaterialDXDescHeap->GetGPUDescriptorHandleForHeapStart());
-		pCommandList->SetGraphicsRootShaderResourceView(4, m_pointLights);
+		pCommandList->SetGraphicsRootShaderResourceView(4, m_pointLightsGVA);
+		pCommandList->SetGraphicsRootShaderResourceView(5, m_directionalLightsGVA);
 
 		// Render Objects
 
@@ -193,7 +226,7 @@ namespace Okay
 
 			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroupObjectDatasVA);
 
-			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticies);
+			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticiesGVA);
 			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
 
 			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
@@ -346,7 +379,7 @@ namespace Okay
 
 	void Renderer::createMainRenderPass()
 	{
-		D3D12_ROOT_PARAMETER rootParams[5] = {};
+		D3D12_ROOT_PARAMETER rootParams[6] = {};
 
 		// Main Render Data (GPURenderData)
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -370,8 +403,8 @@ namespace Okay
 		D3D12_DESCRIPTOR_RANGE range = {};
 		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		range.NumDescriptors = 256; // At this point we don't know the real number of textures, so just setting a high upper limit
-		range.BaseShaderRegister = 3;
-		range.RegisterSpace = 0;
+		range.BaseShaderRegister = 2;
+		range.RegisterSpace = 1;
 		range.OffsetInDescriptorsFromTableStart = 0;
 
 		rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -381,9 +414,15 @@ namespace Okay
 
 		// Point lights
 		rootParams[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[4].Descriptor.ShaderRegister = 2;
+		rootParams[4].Descriptor.ShaderRegister = 3;
 		rootParams[4].Descriptor.RegisterSpace = 0;
 		rootParams[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		// Directional lights
+		rootParams[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		rootParams[5].Descriptor.ShaderRegister = 4;
+		rootParams[5].Descriptor.RegisterSpace = 0;
+		rootParams[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 
 		D3D12_STATIC_SAMPLER_DESC samplerDesc = createDefaultStaticPointSamplerDesc();
@@ -442,7 +481,7 @@ namespace Okay
 			Allocation verticiesAlloc = m_gpuResourceManager.allocateInto(verticiesRH, OKAY_RESOURCE_APPEND, sizeof(Vertex), (uint32_t)verticies.size(), verticies.data());
 			Allocation indiciesAlloc = m_gpuResourceManager.allocateInto(indiciesRH, OKAY_RESOURCE_APPEND, sizeof(uint32_t), (uint32_t)indicies.size(), indicies.data());
 
-			m_dxMeshes[i].gpuVerticies = m_gpuResourceManager.getVirtualAddress(verticiesAlloc);
+			m_dxMeshes[i].gpuVerticiesGVA = m_gpuResourceManager.getVirtualAddress(verticiesAlloc);
 
 			m_dxMeshes[i].indiciesView.BufferLocation = m_gpuResourceManager.getVirtualAddress(indiciesAlloc);
 			m_dxMeshes[i].indiciesView.SizeInBytes = (uint32_t)indiciesAlloc.elementSize * indiciesAlloc.numElements;

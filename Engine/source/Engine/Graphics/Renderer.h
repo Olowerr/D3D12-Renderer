@@ -15,7 +15,7 @@ namespace Okay
 	{
 		DXMesh() = default;
 
-		D3D12_GPU_VIRTUAL_ADDRESS gpuVerticies = {};
+		D3D12_GPU_VIRTUAL_ADDRESS gpuVerticiesGVA = {};
 		D3D12_INDEX_BUFFER_VIEW indiciesView = {};
 		uint32_t numIndicies = INVALID_UINT32;
 	};
@@ -87,7 +87,7 @@ namespace Okay
 		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
 
 	private: // Draw
-		D3D12_GPU_VIRTUAL_ADDRESS m_renderData;
+		D3D12_GPU_VIRTUAL_ADDRESS m_renderDataGVA;
 		RenderPass m_mainRenderPass;
 		DescriptorHeapHandle m_materialTexturesDHH = INVALID_DHH;
 
@@ -98,7 +98,8 @@ namespace Okay
 		std::vector<DrawGroup> m_drawGroups;
 
 	private: // Lights
-		D3D12_GPU_VIRTUAL_ADDRESS m_pointLights;
+		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA;
+		D3D12_GPU_VIRTUAL_ADDRESS m_directionalLightsGVA;
 
 	};
 }
