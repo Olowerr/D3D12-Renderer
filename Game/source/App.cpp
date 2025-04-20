@@ -21,6 +21,17 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 	DirectionalLight& dirLight = sun.addComponent<DirectionalLight>();
 	dirLight.colour = glm::vec3(246.f, 163.f, 22.f) / 255.f;
 	dirLight.intensity = 1.f;
+
+
+	Entity spotLightEntity = m_scene.createEntity();
+	spotLightEntity.getComponent<Transform>().position = glm::vec3(59.f, 53.5, -11.5f);
+	spotLightEntity.getComponent<Transform>().rotation = glm::vec3(38.f, -62.f, 0.f);
+
+	SpotLight& spotLight = spotLightEntity.addComponent<SpotLight>();
+	spotLight.colour = glm::vec3(0.3, 0.5, 0.9f);
+	spotLight.intensity = 60.f;
+	spotLight.attenuation = glm::vec2(0.f, 0.01f);
+	spotLight.spreadAngle = 60.f;
 }
 
 App::~App()

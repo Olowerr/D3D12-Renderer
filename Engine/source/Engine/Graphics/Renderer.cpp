@@ -7,9 +7,10 @@ namespace Okay
 	{
 		glm::mat4 viewProjMatrix = glm::mat4(1.f);
 		glm::vec3 cameraPos = glm::vec3(0.f);
-		uint32_t numPointLigts = 0;
+		uint32_t numPointLights = 0;
 		glm::vec3 cameraDir = glm::vec3(0.f);
-		uint32_t numDirectionalLigts = 0;
+		uint32_t numDirectionalLights = 0;
+		uint32_t numSpotLights = 0;
 	};
 
 	struct GPUObjectData
@@ -28,6 +29,13 @@ namespace Okay
 	{
 		glm::vec3 direction = glm::vec3(0.f);
 		DirectionalLight lightData;
+	};
+
+	struct GPUSpotLight
+	{
+		glm::vec3 position = glm::vec3(0.f);
+		glm::vec3 direction = glm::vec3(0.f);
+		SpotLight lightData; // spreadAngle is used as the cosine of the spreadAngle in the GPU version
 	};
 	
 	void Renderer::initialize(const Window& window)
@@ -131,14 +139,34 @@ namespace Okay
 		{
 			auto [directionalLight, transform] = directionalLightView[entity];
 
-			GPUDirectionalLight* pGPUPointLight = (GPUDirectionalLight*)pMappedRingBuffer;
+			GPUDirectionalLight* pGPUDirLight = (GPUDirectionalLight*)pMappedRingBuffer;
 
-			pGPUPointLight->direction = -transform.forwardVec();
-			pGPUPointLight->lightData = directionalLight;
+			pGPUDirLight->direction = -transform.forwardVec();
+			pGPUDirLight->lightData = directionalLight;
 
-			pMappedRingBuffer += sizeof(DirectionalLight);
+			pMappedRingBuffer += sizeof(GPUDirectionalLight);
 		}
-		writtenBytes += alignAddress64(directionalLightView.size_hint() * sizeof(DirectionalLight), BUFFER_DATA_ALIGNMENT);
+		writtenBytes += alignAddress64(directionalLightView.size_hint() * sizeof(GPUDirectionalLight), BUFFER_DATA_ALIGNMENT);
+		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
+
+
+		m_spotLightsGVA = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
+
+		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
+		for (entt::entity entity : spotLightView)
+		{
+			auto [spotLight, transform] = spotLightView[entity];
+
+			GPUSpotLight* pGPUSpotLight = (GPUSpotLight*)pMappedRingBuffer;
+
+			pGPUSpotLight->position = transform.position;
+			pGPUSpotLight->direction = transform.forwardVec();
+			pGPUSpotLight->lightData = spotLight;
+			pGPUSpotLight->lightData.spreadAngle = glm::cos(glm::radians(spotLight.spreadAngle * 0.5f));
+
+			pMappedRingBuffer += sizeof(GPUSpotLight);
+		}
+		writtenBytes += alignAddress64(spotLightView.size_hint() * sizeof(GPUSpotLight), BUFFER_DATA_ALIGNMENT);
 		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
 
 
@@ -147,8 +175,9 @@ namespace Okay
 		renderData.cameraDir = camTransform.forwardVec();
 		renderData.viewProjMatrix = glm::transpose(cameraComp.getProjectionMatrix(m_viewport.Width, m_viewport.Height) * camTransform.getViewMatrix());
 
-		renderData.numPointLigts = (uint32_t)pointLightView.size_hint();
-		renderData.numDirectionalLigts = (uint32_t)directionalLightView.size_hint();
+		renderData.numPointLights = (uint32_t)pointLightView.size_hint();
+		renderData.numDirectionalLights = (uint32_t)directionalLightView.size_hint();
+		renderData.numSpotLights = (uint32_t)spotLightView.size_hint();
 
 		m_renderDataGVA = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
 		memcpy(pMappedRingBuffer, &renderData, sizeof(GPURenderData));
@@ -196,6 +225,7 @@ namespace Okay
 		pCommandList->SetGraphicsRootDescriptorTable(3, pMaterialDXDescHeap->GetGPUDescriptorHandleForHeapStart());
 		pCommandList->SetGraphicsRootShaderResourceView(4, m_pointLightsGVA);
 		pCommandList->SetGraphicsRootShaderResourceView(5, m_directionalLightsGVA);
+		pCommandList->SetGraphicsRootShaderResourceView(6, m_spotLightsGVA);
 
 		// Render Objects
 
@@ -379,7 +409,7 @@ namespace Okay
 
 	void Renderer::createMainRenderPass()
 	{
-		D3D12_ROOT_PARAMETER rootParams[6] = {};
+		D3D12_ROOT_PARAMETER rootParams[7] = {};
 
 		// Main Render Data (GPURenderData)
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -423,6 +453,12 @@ namespace Okay
 		rootParams[5].Descriptor.ShaderRegister = 4;
 		rootParams[5].Descriptor.RegisterSpace = 0;
 		rootParams[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		// Spot lights
+		rootParams[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		rootParams[6].Descriptor.ShaderRegister = 5;
+		rootParams[6].Descriptor.RegisterSpace = 0;
+		rootParams[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 
 		D3D12_STATIC_SAMPLER_DESC samplerDesc = createDefaultStaticPointSamplerDesc();

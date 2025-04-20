@@ -100,6 +100,7 @@ namespace Okay
 	private: // Lights
 		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA;
 		D3D12_GPU_VIRTUAL_ADDRESS m_directionalLightsGVA;
+		D3D12_GPU_VIRTUAL_ADDRESS m_spotLightsGVA;
 
 	};
 }

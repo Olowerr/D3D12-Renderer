@@ -31,6 +31,7 @@ cbuffer RenderDataCBuffer : register(b0, space0)
 	uint numPointlights;
 	float3 cameraDir;
 	uint numDirectionallights;
+	uint numSpotLights;
 }
 
 

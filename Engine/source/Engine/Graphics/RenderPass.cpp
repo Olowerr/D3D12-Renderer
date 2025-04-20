@@ -13,6 +13,7 @@ namespace Okay
 
 		D3D12_RELEASE(pCommandAllocator); // myb works if dx12 holds an internal reference to it :spinthink:
 
+		// NOTE: Bundles do not work with RenderDoc
 		recordBundleCommands();
 	}
 
