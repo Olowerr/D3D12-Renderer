@@ -38,6 +38,22 @@ namespace Okay
 		SpotLight lightData; // spreadAngle is used as the cosine of the spreadAngle in the GPU version
 	};
 	
+	template<typename EntityView, typename GPUComponent, typename WriteFunc>
+	static uint64_t writeLightData(EntityView view, GPUComponent* pComponent, WriteFunc writeFunc)
+	{
+		for (entt::entity entity : view)
+		{
+			auto [lightComp, transform] = view[entity];
+
+			pComponent->lightData = lightComp;
+			writeFunc(pComponent, transform);
+
+			pComponent += 1;
+		}
+
+		return alignAddress64(view.size_hint() * sizeof(GPUComponent), BUFFER_DATA_ALIGNMENT);
+	}
+
 	void Renderer::initialize(const Window& window)
 	{
 #ifndef NDEBUG
@@ -112,62 +128,39 @@ namespace Okay
 
 
 		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
-		uint64_t writtenBytes = 0;
+		uint64_t ringBufferBytesWritten = 0;
+		uint64_t lightBytesWritten = 0;
 
 		m_pointLightsGVA = m_ringBuffer.getCurrentGPUAddress();
-
 		auto pointLightView = scene.getRegistry().view<PointLight, Transform>();
-		for (entt::entity entity : pointLightView)
-		{
-			auto [pointLight, transform] = pointLightView[entity];
-
-			GPUPointLight* pGPUPointLight = (GPUPointLight*)pMappedRingBuffer;
-
-			pGPUPointLight->position = transform.position;
-			pGPUPointLight->lightData = pointLight;
-
-			pMappedRingBuffer += sizeof(GPUPointLight);
-		}
-		writtenBytes += alignAddress64(pointLightView.size_hint() * sizeof(GPUPointLight), BUFFER_DATA_ALIGNMENT);
-		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
+		lightBytesWritten = writeLightData(pointLightView, (GPUPointLight*)pMappedRingBuffer, [](GPUPointLight* pGPUPointLight, const Transform& transform)
+			{
+				pGPUPointLight->position = transform.position;
+			});
+		ringBufferBytesWritten += lightBytesWritten;
+		pMappedRingBuffer += lightBytesWritten;
 
 
-		m_directionalLightsGVA = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
-
+		m_directionalLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
 		auto directionalLightView = scene.getRegistry().view<DirectionalLight, Transform>();
-		for (entt::entity entity : directionalLightView)
-		{
-			auto [directionalLight, transform] = directionalLightView[entity];
-
-			GPUDirectionalLight* pGPUDirLight = (GPUDirectionalLight*)pMappedRingBuffer;
-
-			pGPUDirLight->direction = -transform.forwardVec();
-			pGPUDirLight->lightData = directionalLight;
-
-			pMappedRingBuffer += sizeof(GPUDirectionalLight);
-		}
-		writtenBytes += alignAddress64(directionalLightView.size_hint() * sizeof(GPUDirectionalLight), BUFFER_DATA_ALIGNMENT);
-		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
+		lightBytesWritten = writeLightData(directionalLightView, (GPUDirectionalLight*)pMappedRingBuffer, [](GPUDirectionalLight* pGPUDirLight, const Transform& transform)
+			{
+				pGPUDirLight->direction = -transform.forwardVec();
+			});
+		ringBufferBytesWritten += lightBytesWritten;
+		pMappedRingBuffer += lightBytesWritten;
 
 
-		m_spotLightsGVA = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
-
+		m_spotLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
 		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
-		for (entt::entity entity : spotLightView)
-		{
-			auto [spotLight, transform] = spotLightView[entity];
-
-			GPUSpotLight* pGPUSpotLight = (GPUSpotLight*)pMappedRingBuffer;
-
-			pGPUSpotLight->position = transform.position;
-			pGPUSpotLight->direction = transform.forwardVec();
-			pGPUSpotLight->lightData = spotLight;
-			pGPUSpotLight->lightData.spreadAngle = glm::cos(glm::radians(spotLight.spreadAngle * 0.5f));
-
-			pMappedRingBuffer += sizeof(GPUSpotLight);
-		}
-		writtenBytes += alignAddress64(spotLightView.size_hint() * sizeof(GPUSpotLight), BUFFER_DATA_ALIGNMENT);
-		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
+		lightBytesWritten = writeLightData(spotLightView, (GPUSpotLight*)pMappedRingBuffer, [](GPUSpotLight* pGPUSpotLight, const Transform& transform)
+			{
+				pGPUSpotLight->position = transform.position;
+				pGPUSpotLight->direction = transform.forwardVec();
+				pGPUSpotLight->lightData.spreadAngle = glm::cos(glm::radians(pGPUSpotLight->lightData.spreadAngle * 0.5f));
+			});
+		ringBufferBytesWritten += lightBytesWritten;
+		pMappedRingBuffer += lightBytesWritten;
 
 
 		GPURenderData renderData{};
@@ -179,14 +172,14 @@ namespace Okay
 		renderData.numDirectionalLights = (uint32_t)directionalLightView.size_hint();
 		renderData.numSpotLights = (uint32_t)spotLightView.size_hint();
 
-		m_renderDataGVA = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
+		m_renderDataGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
 		memcpy(pMappedRingBuffer, &renderData, sizeof(GPURenderData));
 
-		writtenBytes += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
+		ringBufferBytesWritten += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
 		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
 
 
-		m_ringBuffer.unmap(writtenBytes);
+		m_ringBuffer.unmap(ringBufferBytesWritten);
 	}
 
 	void Renderer::preRender()
