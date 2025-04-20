@@ -7,7 +7,7 @@ namespace Okay
 	{
 		glm::mat4 viewProjMatrix = glm::mat4(1.f);
 		glm::vec3 cameraPos = glm::vec3(0.f);
-		float pad0;
+		uint32_t numPointLigts = 0;
 		glm::vec3 cameraDir = glm::vec3(0.f);
 		float pad1;
 	};
@@ -16,6 +16,12 @@ namespace Okay
 	{
 		glm::mat4 objectMatrix = glm::mat4(1.f);
 		uint32_t textureIdx = 0;
+	};
+
+	struct GPUPointLight
+	{
+		glm::vec3 position = glm::vec3(0.f);
+		PointLight lightData;
 	};
 
 	void Renderer::initialize(const Window& window)
@@ -90,12 +96,36 @@ namespace Okay
 		const Transform& camTransform = camEntity.getComponent<Transform>();
 		const Camera& cameraComp = camEntity.getComponent<Camera>();
 
+
+		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
+		uint64_t writtenBytes = 0;
+
+		m_pointLights = m_ringBuffer.getCurrentGPUAddress();
+
+		auto pointLightView = scene.getRegistry().view<PointLight, Transform>();
+		uint32_t i = 0;
+		for (entt::entity entity : pointLightView)
+		{
+			auto [pointLight, transform] = pointLightView[entity];
+
+			GPUPointLight* pGPUPointLight = (GPUPointLight*)pMappedRingBuffer + i++;
+
+			pGPUPointLight->position = transform.position;
+			pGPUPointLight->lightData = pointLight;
+		}
+		writtenBytes += alignAddress64(pointLightView.size_hint() * sizeof(GPUPointLight), BUFFER_DATA_ALIGNMENT);
+
 		GPURenderData renderData{};
 		renderData.cameraPos = camTransform.position;
 		renderData.cameraDir = camTransform.forwardVec();
 		renderData.viewProjMatrix = glm::transpose(cameraComp.getProjectionMatrix(m_viewport.Width, m_viewport.Height) * camTransform.getViewMatrix());
+		renderData.numPointLigts = (uint32_t)pointLightView.size_hint();
 
-		m_renderData = m_ringBuffer.allocate(&renderData, sizeof(GPURenderData));
+		m_renderData = m_ringBuffer.getCurrentGPUAddress() + writtenBytes;
+		memcpy(pMappedRingBuffer + writtenBytes, &renderData, sizeof(GPURenderData));
+		writtenBytes += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
+
+		m_ringBuffer.unmap(writtenBytes);
 	}
 
 	void Renderer::preRender()
@@ -132,6 +162,7 @@ namespace Okay
 
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_renderData);
 		pCommandList->SetGraphicsRootDescriptorTable(3, pMaterialDXDescHeap->GetGPUDescriptorHandleForHeapStart());
+		pCommandList->SetGraphicsRootShaderResourceView(4, m_pointLights);
 
 		// Render Objects
 
@@ -315,7 +346,7 @@ namespace Okay
 
 	void Renderer::createMainRenderPass()
 	{
-		D3D12_ROOT_PARAMETER rootParams[4] = {};
+		D3D12_ROOT_PARAMETER rootParams[5] = {};
 
 		// Main Render Data (GPURenderData)
 		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -339,7 +370,7 @@ namespace Okay
 		D3D12_DESCRIPTOR_RANGE range = {};
 		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 		range.NumDescriptors = 256; // At this point we don't know the real number of textures, so just setting a high upper limit
-		range.BaseShaderRegister = 2;
+		range.BaseShaderRegister = 3;
 		range.RegisterSpace = 0;
 		range.OffsetInDescriptorsFromTableStart = 0;
 
@@ -347,6 +378,12 @@ namespace Okay
 		rootParams[3].DescriptorTable.NumDescriptorRanges = 1;
 		rootParams[3].DescriptorTable.pDescriptorRanges = &range;
 		rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+		// Point lights
+		rootParams[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		rootParams[4].Descriptor.ShaderRegister = 2;
+		rootParams[4].Descriptor.RegisterSpace = 0;
+		rootParams[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 
 		D3D12_STATIC_SAMPLER_DESC samplerDesc = createDefaultStaticPointSamplerDesc();

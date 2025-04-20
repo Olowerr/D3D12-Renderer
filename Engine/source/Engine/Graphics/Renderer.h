@@ -66,7 +66,7 @@ namespace Okay
 		void enableDebugLayer();
 		void enableGPUBasedValidation();
 
-	private:
+	private: // Main
 		ID3D12Device* m_pDevice = nullptr;
 		IDXGISwapChain1* m_pSwapChain = nullptr;
 
@@ -78,7 +78,7 @@ namespace Okay
 		D3D12_VIEWPORT m_viewport = {};
 		D3D12_RECT m_scissorRect = {};
 
-	private:
+	private: // Abstractions + increment size
 		CommandContext m_commandContext;
 		GPUResourceManager m_gpuResourceManager;
 		DescriptorHeapStore m_descriptorHeapStore;
@@ -86,7 +86,7 @@ namespace Okay
 
 		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
 
-	private:
+	private: // Draw
 		D3D12_GPU_VIRTUAL_ADDRESS m_renderData;
 		RenderPass m_mainRenderPass;
 		DescriptorHeapHandle m_materialTexturesDHH = INVALID_DHH;
@@ -96,6 +96,9 @@ namespace Okay
 		// Keep track manually because we don't wanna call clear() cuz it deallocates the std::vectors inside the DrawGroups
 		uint32_t m_activeDrawGroups = INVALID_UINT32;
 		std::vector<DrawGroup> m_drawGroups;
+
+	private: // Lights
+		D3D12_GPU_VIRTUAL_ADDRESS m_pointLights;
 
 	};
 }

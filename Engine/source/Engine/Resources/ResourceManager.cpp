@@ -27,7 +27,7 @@ namespace Okay
 		return glmMat;
 	}
 
-	static void convertMeshData(aiMesh* pAiMesh, MeshData& outData)
+	static void convertMeshData(aiMesh* pAiMesh, MeshData& outData, float scale)
 	{
 		bool hasUV = pAiMesh->HasTextureCoords(0);
 
@@ -37,7 +37,7 @@ namespace Okay
 		// Assuming the same number of positions, normals & uv
 		for (uint32_t i = 0; i < pAiMesh->mNumVertices; i++)
 		{
-			outData.verticies[i].position = assimpToGlmVec3(pAiMesh->mVertices[i]);
+			outData.verticies[i].position = assimpToGlmVec3(pAiMesh->mVertices[i]) * scale;
 			outData.verticies[i].normal = assimpToGlmVec3(pAiMesh->mNormals[i]);
 			outData.verticies[i].uv = hasUV ? assimpToGlmVec3(pAiMesh->mTextureCoords[0][i]) : glm::vec2(0.f);
 		}
@@ -60,7 +60,7 @@ namespace Okay
 		OKAY_ASSERT(pAiScene);
 		OKAY_ASSERT(pAiScene->mMeshes[0]);
 
-		convertMeshData(pAiScene->mMeshes[0], outData);
+		convertMeshData(pAiScene->mMeshes[0], outData, 1.f);
 	}
 
 	AssetID ResourceManager::loadMesh(FilePath path)
@@ -90,7 +90,7 @@ namespace Okay
 		return id;
 	}
 
-	void ResourceManager::loadObjects(FilePath path, std::vector<LoadedObject>& loadedObjects)
+	void ResourceManager::loadObjects(FilePath path, std::vector<LoadedObject>& loadedObjects, float scale)
 	{
 		Assimp::Importer aiImporter;
 
@@ -106,7 +106,7 @@ namespace Okay
 		MeshData meshData;
 		for (uint32_t i = 0; i < pAiScene->mNumMeshes; i++)
 		{
-			convertMeshData(pAiScene->mMeshes[i], meshData);
+			convertMeshData(pAiScene->mMeshes[i], meshData, scale);
 
 			m_meshes.emplace_back(meshData);
 
@@ -128,7 +128,9 @@ namespace Okay
 			aiNodeStack.pop();
 
 			glm::mat4 nodeTransform = assimpToGlmMat4(pAiNode->mTransformation);
-			
+			nodeTransform[3] *= scale;
+			nodeTransform[3].w = 1.f;
+
 			for (uint32_t i = 0; i < pAiNode->mNumMeshes; i++)
 			{
 				LoadedObject& objectData = loadedObjects.emplace_back();

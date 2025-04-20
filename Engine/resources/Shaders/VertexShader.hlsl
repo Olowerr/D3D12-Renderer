@@ -28,7 +28,7 @@ cbuffer RenderDataCBuffer : register(b0, space0)
 {
 	float4x4 viewProjMatrix;
 	float3 cameraPos;
-	float pad0;
+	uint numPointlights;
 	float3 cameraDir;
 	float pad1;
 }

@@ -25,7 +25,7 @@ namespace Okay
 		AssetID loadMesh(FilePath path);
 		AssetID loadTexture(FilePath path);
 
-		void loadObjects(FilePath path, std::vector<LoadedObject>& loadedObjects);
+		void loadObjects(FilePath path, std::vector<LoadedObject>& loadedObjects, float scale);
 
 		void unloadCPUData();
 

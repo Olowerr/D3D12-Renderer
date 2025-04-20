@@ -19,8 +19,7 @@ namespace Okay
 	
 	D3D12_GPU_VIRTUAL_ADDRESS RingBuffer::allocate(const void* pData, uint64_t byteWidth)
 	{
-		D3D12_GPU_VIRTUAL_ADDRESS allocationGpuAddress = m_pRingBuffer->GetGPUVirtualAddress();
-		allocationGpuAddress += m_bufferOffset;
+		D3D12_GPU_VIRTUAL_ADDRESS allocationGpuAddress = getCurrentGPUAddress();
 
 		uint8_t* pMappedData = map();
 		memcpy(pMappedData, pData, byteWidth);
@@ -60,7 +59,6 @@ namespace Okay
 		m_pRingBuffer->Unmap(0, nullptr);
 
 		m_bufferOffset += alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
-
 		OKAY_ASSERT(m_bufferOffset <= m_maxSize);
 	}
 

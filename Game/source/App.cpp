@@ -7,10 +7,13 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 {
 	m_camEntity = m_scene.createEntity();
 	m_camEntity.addComponent<Camera>();
-
 	m_scene.setActiveCamera(m_camEntity);
 
-	createEntitesFromFile(FilePath("resources") / "sponza" / "sponza.obj");
+	PointLight& pointLight = m_camEntity.addComponent<PointLight>();
+	pointLight.colour = glm::vec3(0.9f, 0.2f, 0.4f);
+	pointLight.intensity = 10.f;
+
+	createEntitesFromFile(FilePath("resources") / "sponza" / "sponza.obj", 0.07f);
 }
 
 App::~App()
@@ -38,7 +41,7 @@ void App::updateCamera(TimeStep dt)
 
 	Transform& camTransform = m_camEntity.getComponent<Transform>();
 
-	float camMoveSpeed = 300.f;
+	float camMoveSpeed = 25.f;
 	float camRotSpeed = 10.f;
 
 

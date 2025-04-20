@@ -22,7 +22,7 @@ namespace Okay
 		// onStart, onEnd
 		virtual void onUpdate(TimeStep dt) = 0;
 
-		void createEntitesFromFile(FilePath path);
+		void createEntitesFromFile(FilePath path, float scale);
 
 	protected:
 		Scene m_scene;

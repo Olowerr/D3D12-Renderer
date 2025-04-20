@@ -47,8 +47,8 @@ namespace Okay
 
 	struct Camera
 	{
-		float nearZ = 1.f;
-		float farZ = 5000.f;
+		float nearZ = 0.1f;
+		float farZ = 1000.f;
 		float fov = 90.f;
 
 		inline glm::mat4 getProjectionMatrix(float width, float height) const
@@ -61,5 +61,12 @@ namespace Okay
 	{
 		AssetID meshID = INVALID_ASSET_ID;
 		AssetID textureID = INVALID_ASSET_ID;
+	};
+
+	struct PointLight
+	{
+		glm::vec3 colour = glm::vec3(1.f);
+		float intensity = 1.f;
+		glm::vec2 attenuation = glm::vec2(0.f, 1.f);
 	};
 }

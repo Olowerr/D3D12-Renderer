@@ -39,10 +39,10 @@ namespace Okay
 		}
 	}
 
-	void Application::createEntitesFromFile(FilePath path)
+	void Application::createEntitesFromFile(FilePath path, float scale)
 	{
 		std::vector<LoadedObject> objects;
-		m_resourceManager.loadObjects(path, objects);
+		m_resourceManager.loadObjects(path, objects, scale);
 
 		for (LoadedObject& objectData : objects)
 		{
