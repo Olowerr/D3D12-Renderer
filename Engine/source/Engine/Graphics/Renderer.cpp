@@ -21,7 +21,8 @@ namespace Okay
 	struct GPUObjectData
 	{
 		glm::mat4 objectMatrix = glm::mat4(1.f);
-		uint32_t textureIdx = 0;
+		uint32_t diffuseTextureIdx = 0;
+		uint32_t normalMapIdx = 0;
 	};
 
 	struct GPUPointLight
@@ -254,7 +255,8 @@ namespace Okay
 
 				GPUObjectData* pObjectData = (GPUObjectData*)pMappedObjectDatas;
 				pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
-				pObjectData->textureIdx = meshRenderer.textureID;
+				pObjectData->diffuseTextureIdx = meshRenderer.diffuseTextureID;
+				pObjectData->normalMapIdx = meshRenderer.normalMapID;
 
 				pMappedObjectDatas += sizeof(GPUObjectData);
 			}
@@ -477,17 +479,23 @@ namespace Okay
 		rootParams[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
 
-		D3D12_STATIC_SAMPLER_DESC samplerDesc = createDefaultStaticPointSamplerDesc();
-		samplerDesc.Filter = D3D12_FILTER_ANISOTROPIC;
-		samplerDesc.MaxAnisotropy = 4;
+		// Samplers
+		D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
+		samplers[0] = createDefaultStaticPointSamplerDesc();
+		samplers[0].ShaderRegister = 0;
+
+		samplers[1] = samplers[0];
+		samplers[1].Filter = D3D12_FILTER_ANISOTROPIC;
+		samplers[1].MaxAnisotropy = 4;
+		samplers[1].ShaderRegister = 1;
 
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
 		rootSignatureDesc.NumParameters = _countof(rootParams);
 		rootSignatureDesc.pParameters = rootParams;
 
-		rootSignatureDesc.NumStaticSamplers = 1;
-		rootSignatureDesc.pStaticSamplers = &samplerDesc;
+		rootSignatureDesc.NumStaticSamplers = _countof(samplers);
+		rootSignatureDesc.pStaticSamplers = samplers;
 
 
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = createDefaultGraphicsPipelineStateDesc();

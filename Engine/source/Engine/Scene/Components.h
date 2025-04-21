@@ -60,7 +60,8 @@ namespace Okay
 	struct MeshRenderer
 	{
 		AssetID meshID = INVALID_ASSET_ID;
-		AssetID textureID = INVALID_ASSET_ID;
+		AssetID diffuseTextureID = INVALID_ASSET_ID;
+		AssetID normalMapID = INVALID_ASSET_ID;
 	};
 
 	struct PointLight

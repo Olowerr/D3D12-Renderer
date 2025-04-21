@@ -15,6 +15,9 @@ RWTexture2D<unorm float4> uavMips[16] : register(u0, space0);
 // Samplers
 SamplerState sampy : register(s0, space0);
 
+
+// --- Functions
+
 [numthreads(16, 16, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {

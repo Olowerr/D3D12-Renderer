@@ -33,5 +33,7 @@ namespace Okay
 		glm::vec3 position = glm::vec3(0.f);
 		glm::vec3 normal = glm::vec3(0.f);
 		glm::vec2 uv = glm::vec2(0.f);
+		glm::vec3 tangent = glm::vec3(0.f);
+		glm::vec3 biTangent = glm::vec3(0.f);
 	};
 }

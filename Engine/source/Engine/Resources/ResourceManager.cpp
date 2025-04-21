@@ -30,16 +30,22 @@ namespace Okay
 	static void convertMeshData(aiMesh* pAiMesh, MeshData& outData, float scale)
 	{
 		bool hasUV = pAiMesh->HasTextureCoords(0);
+		bool hasTangent = pAiMesh->HasTangentsAndBitangents();
 
 		outData.verticies.resize(pAiMesh->mNumVertices);
 		outData.indicies.resize(pAiMesh->mNumFaces * 3ull);
 
-		// Assuming the same number of positions, normals & uv
+		// Assuming the same number of positions, normals, uv, etc
 		for (uint32_t i = 0; i < pAiMesh->mNumVertices; i++)
 		{
 			outData.verticies[i].position = assimpToGlmVec3(pAiMesh->mVertices[i]) * scale;
 			outData.verticies[i].normal = assimpToGlmVec3(pAiMesh->mNormals[i]);
 			outData.verticies[i].uv = hasUV ? assimpToGlmVec3(pAiMesh->mTextureCoords[0][i]) : glm::vec2(0.f);
+			if (hasTangent)
+			{
+				outData.verticies[i].tangent = assimpToGlmVec3(pAiMesh->mTangents[i]);
+				outData.verticies[i].biTangent = assimpToGlmVec3(pAiMesh->mBitangents[i]);
+			} // Unsure atm what happens tot he normal calculation if tangent & biTangent are the default zero vec3
 		}
 
 		for (uint32_t i = 0; i < pAiMesh->mNumFaces; i++)
@@ -55,12 +61,34 @@ namespace Okay
 		Assimp::Importer aiImporter;
 
 		const aiScene* pAiScene = aiImporter.ReadFile(path.string(), aiProcess_Triangulate | aiProcess_ConvertToLeftHanded);
-		// aiProcess_OptimizeMeshes aiProcess_CalcTangentSpace
+		// aiProcess_OptimizeMeshes 
 
 		OKAY_ASSERT(pAiScene);
 		OKAY_ASSERT(pAiScene->mMeshes[0]);
 
 		convertMeshData(pAiScene->mMeshes[0], outData, 1.f);
+	}
+
+	static void findOrLoadTexture(aiMaterial* pAiMaterial, aiTextureType textureType, std::unordered_map<std::string, AssetID>& loadedTextures, FilePath folderPath, ResourceManager* pResourceManager, AssetID& outAssetID)
+	{
+		aiString texturePath;
+
+		if (pAiMaterial->GetTexture(textureType, 0u, &texturePath) == aiReturn_SUCCESS)
+		{
+			if (loadedTextures.contains(texturePath.C_Str()))
+			{
+				outAssetID = loadedTextures[texturePath.C_Str()];
+			}
+			else
+			{
+				outAssetID = pResourceManager->loadTexture(folderPath / texturePath.C_Str());
+				loadedTextures[texturePath.C_Str()] = outAssetID;
+			}
+		}
+		else
+		{
+			outAssetID = 0; // Should use some default texture, but just picking one is fine for now :] (this will be funky for normalMaps :eyes:)
+		}
 	}
 
 	AssetID ResourceManager::loadMesh(FilePath path)
@@ -95,8 +123,7 @@ namespace Okay
 		Assimp::Importer aiImporter;
 
 		const aiScene* pAiScene = aiImporter.ReadFile(path.string(), aiProcess_ConvertToLeftHanded | aiProcess_Triangulate |
-			aiProcess_OptimizeMeshes | aiProcess_JoinIdenticalVertices | aiProcess_FindInstances);
-		// aiProcess_CalcTangentSpace
+			aiProcess_OptimizeMeshes | aiProcess_FindInstances | aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace);
 		
 		OKAY_ASSERT(pAiScene);
 
@@ -115,7 +142,6 @@ namespace Okay
 		}
 
 		std::unordered_map<std::string, AssetID> texturePathToID;
-		aiString texturePath;
 
 		std::stack<aiNode*> aiNodeStack;
 		aiNodeStack.emplace() = pAiScene->mRootNode;
@@ -141,22 +167,10 @@ namespace Okay
 				objectData.meshID = startMeshIdx + aiMeshIdx;
 
 				aiMesh* pAiMesh = pAiScene->mMeshes[aiMeshIdx];
-				if (pAiScene->mMaterials[pAiMesh->mMaterialIndex]->GetTexture(aiTextureType_DIFFUSE, 0u, &texturePath) == aiReturn_SUCCESS)
-				{
-					if (texturePathToID.contains(texturePath.C_Str()))
-					{
-						objectData.textureID = texturePathToID[texturePath.C_Str()];
-					}
-					else
-					{
-						objectData.textureID = loadTexture(folderPath / texturePath.C_Str());
-						texturePathToID[texturePath.C_Str()] = objectData.textureID;
-					}
-				}
-				else
-				{
-					objectData.textureID = 0;
-				}
+				aiMaterial* pAiMaterial = pAiScene->mMaterials[pAiMesh->mMaterialIndex];
+
+				findOrLoadTexture(pAiMaterial, aiTextureType_DIFFUSE, texturePathToID, folderPath, this, objectData.diffuseTextureID);
+				findOrLoadTexture(pAiMaterial, aiTextureType_DISPLACEMENT, texturePathToID, folderPath, this, objectData.normalMapID);
 			}
 
 			for (uint32_t i = 0; i < pAiNode->mNumChildren; i++)

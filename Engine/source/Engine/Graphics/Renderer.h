@@ -87,7 +87,7 @@ namespace Okay
 		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
 
 	private: // Draw
-		D3D12_GPU_VIRTUAL_ADDRESS m_renderDataGVA;
+		D3D12_GPU_VIRTUAL_ADDRESS m_renderDataGVA = INVALID_UINT64;
 		RenderPass m_mainRenderPass;
 		DescriptorHeapHandle m_materialTexturesDHH = INVALID_DHH;
 
@@ -98,9 +98,9 @@ namespace Okay
 		std::vector<DrawGroup> m_drawGroups;
 
 	private: // Lights
-		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA;
-		D3D12_GPU_VIRTUAL_ADDRESS m_directionalLightsGVA;
-		D3D12_GPU_VIRTUAL_ADDRESS m_spotLightsGVA;
+		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA = INVALID_UINT64;
+		D3D12_GPU_VIRTUAL_ADDRESS m_directionalLightsGVA = INVALID_UINT64;
+		D3D12_GPU_VIRTUAL_ADDRESS m_spotLightsGVA = INVALID_UINT64;
 
 	private: // Misc
 		ID3D12DescriptorHeap* m_pImguiDescriptorHeap = nullptr;

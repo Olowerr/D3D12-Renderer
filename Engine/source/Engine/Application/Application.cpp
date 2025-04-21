@@ -56,7 +56,8 @@ namespace Okay
 
 			MeshRenderer& meshRenderer = entity.addComponent<MeshRenderer>();
 			meshRenderer.meshID = objectData.meshID;
-			meshRenderer.textureID = objectData.textureID;
+			meshRenderer.diffuseTextureID = objectData.diffuseTextureID;
+			meshRenderer.normalMapID = objectData.normalMapID;
 		}
 	}
 }

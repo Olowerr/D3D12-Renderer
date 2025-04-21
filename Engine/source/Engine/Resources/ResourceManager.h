@@ -11,7 +11,8 @@ namespace Okay
 	struct LoadedObject
 	{
 		AssetID meshID = INVALID_ASSET_ID;
-		AssetID textureID = INVALID_ASSET_ID;
+		AssetID diffuseTextureID = INVALID_ASSET_ID;
+		AssetID normalMapID = INVALID_ASSET_ID;
 
 		glm::mat4 transformMatrix = glm::mat4(1.f);
 	};
