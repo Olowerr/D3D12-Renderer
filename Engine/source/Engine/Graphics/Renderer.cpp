@@ -286,6 +286,8 @@ namespace Okay
 		pCommandList->SetDescriptorHeaps(1, &m_pImguiDescriptorHeap);
 		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList);
 
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
 
 		m_commandContext.transitionResource(m_backBuffers[m_currentBackBuffer], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 

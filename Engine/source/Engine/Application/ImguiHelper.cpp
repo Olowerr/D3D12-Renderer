@@ -16,12 +16,16 @@ namespace Okay
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 
+		ImGuiIO& io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
 		ImGui_ImplGlfw_InitForOther(window.getGLFWWindow(), true);
 
 		ImGui_ImplDX12_InitInfo init_info = {};
 		init_info.Device = pDevice;
 		init_info.CommandQueue = pCommandQueue;
-		init_info.NumFramesInFlight = 1;
+		init_info.NumFramesInFlight = 2; // ImGui assums we have more than 1 framesInFlight, but just lying and saying we have 2 works lmao
 		init_info.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 		init_info.DSVFormat = DXGI_FORMAT_UNKNOWN;
 
