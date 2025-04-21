@@ -64,7 +64,7 @@ void App::updateCamera(TimeStep dt)
 	Transform& camTransform = m_camEntity.getComponent<Transform>();
 
 	float camMoveSpeed = 25.f;
-	float camRotSpeed = 10.f;
+	float camRotSpeed = 0.1f;
 
 
 	// Movement
@@ -98,6 +98,6 @@ void App::updateCamera(TimeStep dt)
 
 	glm::vec2 mouseDelta = Input::getMouseDelta();
 
-	camTransform.rotation.y += mouseDelta.x * camRotSpeed * dt;
-	camTransform.rotation.x += mouseDelta.y * camRotSpeed * dt;
+	camTransform.rotation.y += mouseDelta.x * camRotSpeed;
+	camTransform.rotation.x += mouseDelta.y * camRotSpeed;
 }
