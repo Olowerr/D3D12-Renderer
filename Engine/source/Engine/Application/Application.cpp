@@ -1,5 +1,7 @@
 #include "Application.h"
 
+#include "ImguiHelper.h"
+
 namespace Okay
 {
 	Application::Application(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight)
@@ -32,6 +34,8 @@ namespace Okay
 			frameTimer.reset();
 
 			m_window.processMessages();
+
+			imguiNewFrame();
 
 			onUpdate(timeStep);
 

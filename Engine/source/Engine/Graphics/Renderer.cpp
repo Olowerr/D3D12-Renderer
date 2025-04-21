@@ -1,6 +1,11 @@
 #include "Renderer.h"
 #include "Engine/Resources/ResourceManager.h"
 
+#include "Engine/Application/ImguiHelper.h"
+
+#include "Imgui/imgui.h"
+#include "Imgui/imgui_impl_dx12.h"
+
 namespace Okay
 {
 	struct GPURenderData
@@ -85,10 +90,19 @@ namespace Okay
 		{
 			drawGroup.entities.reserve(50);
 		}
+
+
+		// In this version of Imgui, only 1 SRV is needed, it's stated that future versions will need more, but I don't see a reason to switch version atm :]
+		DescriptorHeapHandle imguiHeapHandle = m_descriptorHeapStore.createDescriptorHeap(1, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		m_pImguiDescriptorHeap = m_descriptorHeapStore.getDXDescriptorHeap(imguiHeapHandle);
+
+		imguiInitialize(window, m_pDevice, m_commandContext.getCommandQueue(), m_pImguiDescriptorHeap);
 	}
 
 	void Renderer::shutdown()
 	{
+		imguiShutdown();
+
 		m_commandContext.shutdown();
 		m_gpuResourceManager.shutdown();
 
@@ -266,6 +280,13 @@ namespace Okay
 
 	void Renderer::postRender()
 	{
+		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
+
+		ImGui::Render();
+		pCommandList->SetDescriptorHeaps(1, &m_pImguiDescriptorHeap);
+		ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), pCommandList);
+
+
 		m_commandContext.transitionResource(m_backBuffers[m_currentBackBuffer], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
 		m_commandContext.execute();

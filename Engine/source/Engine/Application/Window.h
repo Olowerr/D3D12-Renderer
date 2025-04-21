@@ -24,6 +24,7 @@ namespace Okay
 		void processMessages();
 
 		HWND getHWND() const;
+		GLFWwindow* getGLFWWindow() const;
 
 	private:
 		void setInputMode(MouseMode mode);

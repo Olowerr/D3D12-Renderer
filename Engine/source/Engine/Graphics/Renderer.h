@@ -102,5 +102,7 @@ namespace Okay
 		D3D12_GPU_VIRTUAL_ADDRESS m_directionalLightsGVA;
 		D3D12_GPU_VIRTUAL_ADDRESS m_spotLightsGVA;
 
+	private: // Misc
+		ID3D12DescriptorHeap* m_pImguiDescriptorHeap = nullptr;
 	};
 }

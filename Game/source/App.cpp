@@ -1,5 +1,7 @@
 #include "App.h"
 
+#include "imgui/imgui.h"
+
 using namespace Okay;
 
 App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight)
@@ -42,6 +44,8 @@ App::~App()
 void App::onUpdate(TimeStep dt)
 {
 	updateCamera(dt);
+
+	ImGui::ShowDemoWindow(nullptr);
 }
 
 void App::updateCamera(TimeStep dt)

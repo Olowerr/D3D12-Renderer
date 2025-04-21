@@ -87,6 +87,11 @@ namespace Okay
 		return glfwGetWin32Window(m_pGlfwWindow);
 	}
 
+	GLFWwindow* Window::getGLFWWindow() const
+	{
+		return m_pGlfwWindow;
+	}
+
 	void Window::setInputMode(MouseMode mode)
 	{
 		// For now mouse mode should not be changed to anything but these

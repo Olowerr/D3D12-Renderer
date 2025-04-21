@@ -1,5 +1,6 @@
 #include "Input.h"
 #include "Window.h"
+#include "ImguiHelper.h"
 
 namespace Okay
 {
@@ -47,6 +48,7 @@ namespace Okay
 
 	void Input::setMouseMode(MouseMode mode)
 	{
+		imguiToggleMouse(mode == MouseMode::FREE);
 		Input::s_pWindow->setInputMode(mode);
 	}
 
