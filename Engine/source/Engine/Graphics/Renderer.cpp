@@ -112,6 +112,7 @@ namespace Okay
 		m_descriptorHeapStore.shutdown();
 
 		m_mainRenderPass.shutdown();
+		m_shadowPass.shutdown();
 
 		for (uint32_t i = 0; i < NUM_BACKBUFFERS; i++)
 			D3D12_RELEASE(m_backBuffers[i]);
@@ -427,8 +428,23 @@ namespace Okay
 
 	void Renderer::createMainRenderPass()
 	{
+		D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
+		samplers[0] = createDefaultStaticPointSamplerDesc();
+		samplers[0].ShaderRegister = 0;
+
+		samplers[1] = samplers[0];
+		samplers[1].Filter = D3D12_FILTER_ANISOTROPIC;
+		samplers[1].MaxAnisotropy = 4;
+		samplers[1].ShaderRegister = 1;
+
 		std::vector<D3D12_ROOT_PARAMETER> rootParams = {};
-		rootParams.reserve(16);
+		rootParams.reserve(32);
+
+		ID3DBlob* shaderBlobs[5] = {};
+		uint32_t nextBlobIdx = 0;
+
+
+		// Main Render Pass
 
 		rootParams.emplace_back(createRootParamCBV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Main Render Data (GPURenderData)
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Verticies SRV
@@ -442,41 +458,45 @@ namespace Okay
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_PIXEL, 4, 0)); // Directional lights
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_PIXEL, 5, 0)); // Spot lights
 
-
-		D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
-		samplers[0] = createDefaultStaticPointSamplerDesc();
-		samplers[0].ShaderRegister = 0;
-
-		samplers[1] = samplers[0];
-		samplers[1].Filter = D3D12_FILTER_ANISOTROPIC;
-		samplers[1].MaxAnisotropy = 4;
-		samplers[1].ShaderRegister = 1;
-
-
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
 		rootSignatureDesc.NumParameters = (uint32_t)rootParams.size();
 		rootSignatureDesc.pParameters = rootParams.data();
-
 		rootSignatureDesc.NumStaticSamplers = _countof(samplers);
 		rootSignatureDesc.pStaticSamplers = samplers;
-
 
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC pipelineDesc = createDefaultGraphicsPipelineStateDesc();
 		pipelineDesc.NumRenderTargets = 1;
 		pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
-		pipelineDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 
-		ID3DBlob* pVSBlob = nullptr;
-		ID3DBlob* pPSBlob = nullptr;
-
-		pipelineDesc.VS = compileShader(SHADER_PATH / "VertexShader.hlsl", "vs_5_1", &pVSBlob);
-		pipelineDesc.PS = compileShader(SHADER_PATH / "PixelShader.hlsl", "ps_5_1", &pPSBlob);
-
+		pipelineDesc.VS = compileShader(SHADER_PATH / "VertexShader.hlsl", "vs_5_1", &shaderBlobs[nextBlobIdx++]);
+		pipelineDesc.PS = compileShader(SHADER_PATH / "PixelShader.hlsl", "ps_5_1", &shaderBlobs[nextBlobIdx++]);
 
 		m_mainRenderPass.initialize(m_pDevice, pipelineDesc, rootSignatureDesc);
 
-		D3D12_RELEASE(pVSBlob);
-		D3D12_RELEASE(pPSBlob);
+		nextBlobIdx = 0;
+		for (ID3DBlob*& pBlob : shaderBlobs)
+			D3D12_RELEASE(pBlob);
+
+
+		// Shadow Pass
+
+		rootParams.clear();
+		rootParams.emplace_back(createRootParamCBV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Main Render Data (GPURenderData)
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Verticies SRV
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 1, 0)); // Object datas (GPUObjcetData)
+
+		rootSignatureDesc.NumParameters = (uint32_t)rootParams.size();
+		rootSignatureDesc.pParameters = rootParams.data();
+
+		pipelineDesc = createDefaultGraphicsPipelineStateDesc();
+		pipelineDesc.NumRenderTargets = 0;
+		pipelineDesc.VS = compileShader(SHADER_PATH / "ShadowVS.hlsl", "vs_5_1", &shaderBlobs[nextBlobIdx++]);
+
+		m_shadowPass.initialize(m_pDevice, pipelineDesc, rootSignatureDesc);
+
+		nextBlobIdx = 0;
+		for (ID3DBlob*& pBlob : shaderBlobs)
+			D3D12_RELEASE(pBlob);
 	}
 
 	void Renderer::preProcessMeshes(const std::vector<Mesh>& meshes)

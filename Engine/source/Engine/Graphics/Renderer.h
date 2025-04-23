@@ -88,7 +88,6 @@ namespace Okay
 
 	private: // Draw
 		D3D12_GPU_VIRTUAL_ADDRESS m_renderDataGVA = INVALID_UINT64;
-		RenderPass m_mainRenderPass;
 		DescriptorHeapHandle m_materialTexturesDHH = INVALID_DHH;
 
 		std::vector<DXMesh> m_dxMeshes;
@@ -96,6 +95,10 @@ namespace Okay
 		// Keep track manually because we don't wanna call clear() cuz it deallocates the std::vectors inside the DrawGroups
 		uint32_t m_activeDrawGroups = INVALID_UINT32;
 		std::vector<DrawGroup> m_drawGroups;
+
+	private: // Render Passes
+		RenderPass m_mainRenderPass;
+		RenderPass m_shadowPass;
 
 	private: // Lights
 		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA = INVALID_UINT64;
