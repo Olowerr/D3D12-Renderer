@@ -427,59 +427,22 @@ namespace Okay
 
 	void Renderer::createMainRenderPass()
 	{
-		D3D12_ROOT_PARAMETER rootParams[7] = {};
+		std::vector<D3D12_ROOT_PARAMETER> rootParams = {};
+		rootParams.reserve(16);
 
-		// Main Render Data (GPURenderData)
-		rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
-		rootParams[0].Descriptor.ShaderRegister = 0;
-		rootParams[0].Descriptor.RegisterSpace = 0;
-		rootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-		// Verticies SRV
-		rootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[1].Descriptor.ShaderRegister = 0;
-		rootParams[1].Descriptor.RegisterSpace = 0;
-		rootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
-
-		// Object datas (GPUObjcetData)
-		rootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[2].Descriptor.ShaderRegister = 1;
-		rootParams[2].Descriptor.RegisterSpace = 0;
-		rootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+		rootParams.emplace_back(createRootParamCBV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Main Render Data (GPURenderData)
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Verticies SRV
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 1, 0)); // Object datas (GPUObjcetData)
 		
-		// Textures
-		D3D12_DESCRIPTOR_RANGE range = {};
-		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-		range.NumDescriptors = 256; // At this point we don't know the real number of textures, so just setting a high upper limit
-		range.BaseShaderRegister = 2;
-		range.RegisterSpace = 1;
-		range.OffsetInDescriptorsFromTableStart = 0;
+		// At this point we don't know the real number of textures, so just setting a high upper limit
+		D3D12_DESCRIPTOR_RANGE textureDescriptorRange = createRangeSRV(2, 1, 256, 0);
+		rootParams.emplace_back(createRootParamTable(D3D12_SHADER_VISIBILITY_PIXEL, &textureDescriptorRange, 1)); // Textures
 
-		rootParams[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-		rootParams[3].DescriptorTable.NumDescriptorRanges = 1;
-		rootParams[3].DescriptorTable.pDescriptorRanges = &range;
-		rootParams[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-		// Point lights
-		rootParams[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[4].Descriptor.ShaderRegister = 3;
-		rootParams[4].Descriptor.RegisterSpace = 0;
-		rootParams[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-		// Directional lights
-		rootParams[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[5].Descriptor.ShaderRegister = 4;
-		rootParams[5].Descriptor.RegisterSpace = 0;
-		rootParams[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-
-		// Spot lights
-		rootParams[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
-		rootParams[6].Descriptor.ShaderRegister = 5;
-		rootParams[6].Descriptor.RegisterSpace = 0;
-		rootParams[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_PIXEL, 3, 0)); // Point lights
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_PIXEL, 4, 0)); // Directional lights
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_PIXEL, 5, 0)); // Spot lights
 
 
-		// Samplers
 		D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
 		samplers[0] = createDefaultStaticPointSamplerDesc();
 		samplers[0].ShaderRegister = 0;
@@ -491,8 +454,8 @@ namespace Okay
 
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
-		rootSignatureDesc.NumParameters = _countof(rootParams);
-		rootSignatureDesc.pParameters = rootParams;
+		rootSignatureDesc.NumParameters = (uint32_t)rootParams.size();
+		rootSignatureDesc.pParameters = rootParams.data();
 
 		rootSignatureDesc.NumStaticSamplers = _countof(samplers);
 		rootSignatureDesc.pStaticSamplers = samplers;

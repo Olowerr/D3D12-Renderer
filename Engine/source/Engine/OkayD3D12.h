@@ -125,7 +125,7 @@ namespace Okay
 		HRESULT hr = D3D12SerializeRootSignature(&rootSignatureDesc, D3D_ROOT_SIGNATURE_VERSION_1_0, &pRootBlob, &pErrorBlob);
 		if (FAILED(hr))
 		{
-			printf("Failed to serialize root signature: %s\n", (char*)pErrorBlob->GetBufferPointer());
+			printf("Failed to serialize root signature: %s\n", pErrorBlob ? (char*)pErrorBlob->GetBufferPointer() : "No errors produced.");
 			OKAY_ASSERT(false);
 		}
 
@@ -168,6 +168,101 @@ namespace Okay
 			sourceBox.right = glm::max(sourceBox.right / 2, 1u);
 			sourceBox.bottom = glm::max(sourceBox.bottom / 2, 1u);
 		}
+	}
+
+	static D3D12_ROOT_PARAMETER createRootParamCBV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
+	{
+		D3D12_ROOT_PARAMETER param = {};
+		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+		param.ShaderVisibility = visibility;
+		param.Descriptor.ShaderRegister = shaderRegister;
+		param.Descriptor.RegisterSpace = registerSpace;
+		return param;
+	}
+
+	static D3D12_ROOT_PARAMETER createRootParamSRV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
+	{
+		D3D12_ROOT_PARAMETER param = {};
+		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
+		param.ShaderVisibility = visibility;
+		param.Descriptor.ShaderRegister = shaderRegister;
+		param.Descriptor.RegisterSpace = registerSpace;
+		return param;
+	}
+
+	static D3D12_ROOT_PARAMETER createRootParamUAV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
+	{
+		D3D12_ROOT_PARAMETER param = {};
+		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
+		param.ShaderVisibility = visibility;
+		param.Descriptor.ShaderRegister = shaderRegister;
+		param.Descriptor.RegisterSpace = registerSpace;
+		return param;
+	}
+
+	static D3D12_ROOT_PARAMETER createRootParamConstants(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace, uint32_t numValues)
+	{
+		D3D12_ROOT_PARAMETER param = {};
+		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
+		param.ShaderVisibility = visibility;
+		param.Constants.Num32BitValues = numValues;
+		param.Constants.ShaderRegister = shaderRegister;
+		param.Constants.RegisterSpace = registerSpace;
+		return param;
+	}
+
+	static D3D12_ROOT_PARAMETER createRootParamTable(D3D12_SHADER_VISIBILITY visibility, D3D12_DESCRIPTOR_RANGE* pRanges, uint32_t numRanges)
+	{
+		D3D12_ROOT_PARAMETER param = {};
+		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+		param.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+		param.DescriptorTable.NumDescriptorRanges = numRanges;
+		param.DescriptorTable.pDescriptorRanges = pRanges;
+		return param;
+	}
+
+	static D3D12_DESCRIPTOR_RANGE createRangeCBV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
+	{
+		D3D12_DESCRIPTOR_RANGE range = {};
+		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
+		range.NumDescriptors = numDescriptors;
+		range.BaseShaderRegister = shaderRegister;
+		range.RegisterSpace = registerSpace;
+		range.OffsetInDescriptorsFromTableStart = offset;
+		return range;
+	}
+
+	static D3D12_DESCRIPTOR_RANGE createRangeSRV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
+	{
+		D3D12_DESCRIPTOR_RANGE range = {};
+		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+		range.NumDescriptors = numDescriptors;
+		range.BaseShaderRegister = shaderRegister;
+		range.RegisterSpace = registerSpace;
+		range.OffsetInDescriptorsFromTableStart = offset;
+		return range;
+	}
+
+	static D3D12_DESCRIPTOR_RANGE createRangeUAV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
+	{
+		D3D12_DESCRIPTOR_RANGE range = {};
+		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+		range.NumDescriptors = numDescriptors;
+		range.BaseShaderRegister = shaderRegister;
+		range.RegisterSpace = registerSpace;
+		range.OffsetInDescriptorsFromTableStart = offset;
+		return range;
+	}
+
+	static D3D12_DESCRIPTOR_RANGE createRangeSampler(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
+	{
+		D3D12_DESCRIPTOR_RANGE range = {};
+		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
+		range.NumDescriptors = numDescriptors;
+		range.BaseShaderRegister = shaderRegister;
+		range.RegisterSpace = registerSpace;
+		range.OffsetInDescriptorsFromTableStart = offset;
+		return range;
 	}
 
 	constexpr D3D12_BLEND_DESC createDefaultBlendDesc()

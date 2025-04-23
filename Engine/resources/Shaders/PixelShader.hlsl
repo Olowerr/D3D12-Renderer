@@ -79,6 +79,8 @@ float3 sampleNormalMap(uint normalMapIdx, float2 uv, float3x3 tbnMatrix)
     float3 normal = textures[normalMapIdx].Sample(pointSampler, uv).rgb;
     normal = normal * 2.f - float3(1.f, 1.f, 1.f);
 
+    normal.y *= -1.f; // Flipping is correct for sponza, but isn't for many other normal maps
+
     return normalize(mul(normal, tbnMatrix));
 }
 
