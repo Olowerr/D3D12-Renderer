@@ -33,6 +33,9 @@ struct DirectionalLight
 
 struct SpotLight
 {
+    float4x4 viewMatrix;
+    float4x4 projMatrix;
+    
     float3 position;
     float3 direction;
 
@@ -64,6 +67,7 @@ StructuredBuffer<SpotLight> spotLights: register(t5, space0);
 
 // Textures
 Texture2D<unorm float4> textures[256] : register(t2, space1);
+Texture2D<unorm float> shadowMap : register(t6, space0);
 
 
 // Samplers
@@ -88,6 +92,7 @@ float4 main(InputData input) : SV_TARGET
 {
     uint normalMapTextureIdx = objectDatas[input.instanceID].normalMapIdx;
     float3 worldNormal = sampleNormalMap(normalMapTextureIdx, input.uv, input.tbnMatrix);
+    float3 vertexNormal = normalize(input.tbnMatrix[2].xyz);
     
     uint diffuseTextureIdx = objectDatas[input.instanceID].diffuseTextureIdx;
     float3 materialDiffuse = textures[diffuseTextureIdx].Sample(anisotropicSampler, input.uv).rgb;
@@ -103,6 +108,7 @@ float4 main(InputData input) : SV_TARGET
     uint i = 0;
     for (i = 0; i < numPointLights; i++)
     {
+        break;
         PointLight pointLight = pointLights[i];
         
         float3 worldToLight = pointLight.position - input.worldPosition;
@@ -126,6 +132,7 @@ float4 main(InputData input) : SV_TARGET
     
     for (i = 0; i < numDirectionalLights; i++)
     {
+        break;
         DirectionalLight dirLight = directionalLights[i];
         
         float dotty = max(dot(dirLight.direction, worldNormal), 0.f);
@@ -154,6 +161,21 @@ float4 main(InputData input) : SV_TARGET
             continue;
         }
 
+        
+        float3 positionLightSpace = mul(float4(input.worldPosition, 1.f), spotLight.viewMatrix).xyz;
+        float4 worldLightNDC = mul(float4(positionLightSpace, 1.f), spotLight.projMatrix);
+
+        worldLightNDC.xyz /= worldLightNDC.w;
+        worldLightNDC.xy = float2(worldLightNDC.x * 0.5f + 0.5f, worldLightNDC.y * -0.5f + 0.5f);
+        
+        float shadowMapDepth = shadowMap.SampleLevel(pointSampler, worldLightNDC.xy, 0).r;
+        float shadowBias = lerp(0.00001f, 0.000001f, max(dot(vertexNormal, worldToLight), 0.f));
+        
+        if (shadowMapDepth < worldLightNDC.z - shadowBias)
+        {
+            continue;
+        }
+        
         
         float dotty = max(dot(worldToLight, worldNormal), 0.f);
         float attenuation = 1.f / (1.f + spotLight.attenuation.x * distance + spotLight.attenuation.y * distance * distance);

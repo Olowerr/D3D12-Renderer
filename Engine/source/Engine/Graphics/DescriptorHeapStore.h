@@ -29,6 +29,8 @@ namespace Okay
 	{
 		DescriptorHeapHandle heapHandle = INVALID_DHH;
 		uint32_t heapSlot = INVALID_UINT32;
+		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = {};
+		D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = {};
 	};
 
 	class DescriptorHeapStore
@@ -46,9 +48,6 @@ namespace Okay
 		Descriptor allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE type, const DescriptorDesc* pDescs, uint32_t numDescriptors);
 
 		ID3D12DescriptorHeap* getDXDescriptorHeap(DescriptorHeapHandle heapHandle);
-
-		D3D12_CPU_DESCRIPTOR_HANDLE getCPUHandle(const Descriptor& descriptor);
-		D3D12_GPU_DESCRIPTOR_HANDLE getGPUHandle(const Descriptor& descriptor);
 
 	private:
 		DescriptorHeapHandle findSufficentCommittedHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type);

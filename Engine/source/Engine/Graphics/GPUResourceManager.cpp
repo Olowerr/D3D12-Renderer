@@ -45,6 +45,7 @@ namespace Okay
 			pClearValue = &clearValue;
 			clearValue.DepthStencil.Depth = 1.f;
 			clearValue.DepthStencil.Stencil = 0;
+			clearValue.Format = DXGI_FORMAT_D32_FLOAT; // Assuming depth uses some single 32bit format
 		}
 		else if (flags & OKAY_TEXTURE_FLAG_RENDER)
 		{
@@ -181,7 +182,6 @@ namespace Okay
 
 	DescriptorDesc GPUResourceManager::createDescriptorDesc(const Allocation& allocation, DescriptorType type, bool nullDesc)
 	{
-		// handle asserted in decodeHandle
 		OKAY_ASSERT(type != OKAY_DESCRIPTOR_TYPE_NONE);
 
 		ID3D12Resource* pDXResource = getDXResource(allocation.resourceHandle);
@@ -354,7 +354,7 @@ namespace Okay
 			textureSRVDesc.pDXResource = pDXIntermediateTexture;
 
 			Descriptor srvDescriptor = m_pDescriptorHeapStore->allocateDescriptors(descHeapHandle, OKAY_DESCRIPTOR_APPEND, &textureSRVDesc, 1);
-			pGraphicsComputeList->SetComputeRootDescriptorTable(0, m_pDescriptorHeapStore->getGPUHandle(srvDescriptor));
+			pGraphicsComputeList->SetComputeRootDescriptorTable(0, srvDescriptor.gpuHandle);
 
 
 			for (uint32_t i = 1; i < textureDesc.MipLevels; i++)

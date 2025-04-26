@@ -47,8 +47,8 @@ namespace Okay
 
 	struct Camera
 	{
-		float nearZ = 0.1f;
-		float farZ = 1000.f;
+		float nearZ = 1.f;
+		float farZ = 5000.f;
 		float fov = 90.f;
 
 		inline glm::mat4 getProjectionMatrix(float width, float height) const

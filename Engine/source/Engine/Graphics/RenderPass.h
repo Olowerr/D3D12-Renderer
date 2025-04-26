@@ -26,24 +26,25 @@ namespace Okay
 	public:
 		RenderPass() = default;
 		virtual ~RenderPass() = default;
-	
+
 		void initialize(ID3D12Device* pDevice, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& pipelineDesc, const D3D12_ROOT_SIGNATURE_DESC& rootSignatureDesc);
 		void shutdown();
 
-		//void attachViews()
-
-		void bind(ID3D12GraphicsCommandList* pDirectCommandList);
-		// TODO: Add 'setRenderTargets" function (can change name) but point is to move the RTV responsibility to the RenderPasses
+		void bind(ID3D12GraphicsCommandList* pDirectCommandList, uint32_t numRTVs, D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle);
+		void updateProperties(D3D12_VIEWPORT viewport, D3D12_RECT scissorRect, D3D12_PRIMITIVE_TOPOLOGY topology);
 
 	private:
-		void recordBundleCommands();
-
+		void recordBundle(D3D12_PRIMITIVE_TOPOLOGY topology);
 		void createPSO(ID3D12Device* pDevice, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& pipelineDesc);
 
 	private:
 		ID3D12GraphicsCommandList* m_pCommandBundle = nullptr;
-		
+		ID3D12CommandAllocator* m_pCommandAllocator = nullptr;
+
 		ID3D12RootSignature* m_pRootSignature = nullptr;
 		ID3D12PipelineState* m_pPSO = nullptr;
+
+		D3D12_VIEWPORT m_viewport;
+		D3D12_RECT m_scissorRect;
 	};
 }

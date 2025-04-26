@@ -170,7 +170,7 @@ namespace Okay
 		}
 	}
 
-	static D3D12_ROOT_PARAMETER createRootParamCBV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
+	constexpr D3D12_ROOT_PARAMETER createRootParamCBV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
 	{
 		D3D12_ROOT_PARAMETER param = {};
 		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -180,7 +180,7 @@ namespace Okay
 		return param;
 	}
 
-	static D3D12_ROOT_PARAMETER createRootParamSRV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
+	constexpr D3D12_ROOT_PARAMETER createRootParamSRV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
 	{
 		D3D12_ROOT_PARAMETER param = {};
 		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV;
@@ -190,7 +190,7 @@ namespace Okay
 		return param;
 	}
 
-	static D3D12_ROOT_PARAMETER createRootParamUAV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
+	constexpr D3D12_ROOT_PARAMETER createRootParamUAV(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace)
 	{
 		D3D12_ROOT_PARAMETER param = {};
 		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
@@ -200,7 +200,7 @@ namespace Okay
 		return param;
 	}
 
-	static D3D12_ROOT_PARAMETER createRootParamConstants(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace, uint32_t numValues)
+	constexpr D3D12_ROOT_PARAMETER createRootParamConstants(D3D12_SHADER_VISIBILITY visibility, uint32_t shaderRegister, uint32_t registerSpace, uint32_t numValues)
 	{
 		D3D12_ROOT_PARAMETER param = {};
 		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_UAV;
@@ -211,7 +211,7 @@ namespace Okay
 		return param;
 	}
 
-	static D3D12_ROOT_PARAMETER createRootParamTable(D3D12_SHADER_VISIBILITY visibility, D3D12_DESCRIPTOR_RANGE* pRanges, uint32_t numRanges)
+	constexpr D3D12_ROOT_PARAMETER createRootParamTable(D3D12_SHADER_VISIBILITY visibility, D3D12_DESCRIPTOR_RANGE* pRanges, uint32_t numRanges)
 	{
 		D3D12_ROOT_PARAMETER param = {};
 		param.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -221,7 +221,7 @@ namespace Okay
 		return param;
 	}
 
-	static D3D12_DESCRIPTOR_RANGE createRangeCBV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
+	constexpr D3D12_DESCRIPTOR_RANGE createRangeCBV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
 	{
 		D3D12_DESCRIPTOR_RANGE range = {};
 		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
@@ -232,7 +232,7 @@ namespace Okay
 		return range;
 	}
 
-	static D3D12_DESCRIPTOR_RANGE createRangeSRV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
+	constexpr D3D12_DESCRIPTOR_RANGE createRangeSRV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
 	{
 		D3D12_DESCRIPTOR_RANGE range = {};
 		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
@@ -243,7 +243,7 @@ namespace Okay
 		return range;
 	}
 
-	static D3D12_DESCRIPTOR_RANGE createRangeUAV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
+	constexpr D3D12_DESCRIPTOR_RANGE createRangeUAV(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
 	{
 		D3D12_DESCRIPTOR_RANGE range = {};
 		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
@@ -254,7 +254,7 @@ namespace Okay
 		return range;
 	}
 
-	static D3D12_DESCRIPTOR_RANGE createRangeSampler(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
+	constexpr D3D12_DESCRIPTOR_RANGE createRangeSampler(uint32_t shaderRegister, uint32_t registerSpace, uint32_t numDescriptors, uint32_t offset)
 	{
 		D3D12_DESCRIPTOR_RANGE range = {};
 		range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
@@ -263,6 +263,30 @@ namespace Okay
 		range.RegisterSpace = registerSpace;
 		range.OffsetInDescriptorsFromTableStart = offset;
 		return range;
+	}
+
+	constexpr D3D12_VIEWPORT createViewport(float width, float height)
+	{
+		D3D12_VIEWPORT viewport = {};
+		viewport.TopLeftX = 0.f;
+		viewport.TopLeftY = 0.f;
+		viewport.Width = width;
+		viewport.Height = height;
+		viewport.MinDepth = 0;
+		viewport.MaxDepth = 1;
+
+		return viewport;
+	}
+
+	constexpr D3D12_RECT createRect(uint32_t width, uint32_t height)
+	{
+		D3D12_RECT rect = {};
+		rect.left = 0;
+		rect.top = 0;
+		rect.right = (LONG)width;
+		rect.bottom = (LONG)height;
+
+		return rect;
 	}
 
 	constexpr D3D12_BLEND_DESC createDefaultBlendDesc()

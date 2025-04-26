@@ -7,7 +7,7 @@ using namespace Okay;
 App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight)
 	:Application(windowName, windowWidth, windowHeight)
 {
-	createEntitesFromFile(FilePath("resources") / "sponza" / "sponza.obj", 0.07f);
+	createEntitesFromFile(FilePath("resources") / "sponza" / "sponza.obj", 1.f);
 
 	m_camEntity = m_scene.createEntity();
 	m_camEntity.addComponent<Camera>();
@@ -26,13 +26,14 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 
 
 	Entity spotLightEntity = m_scene.createEntity();
-	spotLightEntity.getComponent<Transform>().position = glm::vec3(59.f, 53.5, -11.5f);
-	spotLightEntity.getComponent<Transform>().rotation = glm::vec3(38.f, -62.f, 0.f);
-
+	spotLightEntity.getComponent<Transform>().position = glm::vec3(847.f, 366.f, -166.f);
+	spotLightEntity.getComponent<Transform>().rotation = glm::vec3(27.1f, -62.5f, 0.f);
+	
+		
 	SpotLight& spotLight = spotLightEntity.addComponent<SpotLight>();
 	spotLight.colour = glm::vec3(0.3, 0.5, 0.9f);
-	spotLight.intensity = 60.f;
-	spotLight.attenuation = glm::vec2(0.f, 0.01f);
+	spotLight.intensity = 1.f;
+	spotLight.attenuation = glm::vec2(0.f, 0.f);
 	spotLight.spreadAngle = 60.f;
 }
 
@@ -63,7 +64,7 @@ void App::updateCamera(TimeStep dt)
 
 	Transform& camTransform = m_camEntity.getComponent<Transform>();
 
-	float camMoveSpeed = 25.f;
+	float camMoveSpeed = 300.f;
 	float camRotSpeed = 0.1f;
 
 

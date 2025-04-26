@@ -7,34 +7,54 @@ namespace Okay
 		m_pRootSignature = createRootSignature(pDevice, rootSignatureDesc);
 		createPSO(pDevice, pipelineDesc);
 
-		ID3D12CommandAllocator* pCommandAllocator = nullptr;
-		DX_CHECK(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_BUNDLE, IID_PPV_ARGS(&pCommandAllocator)));
-		DX_CHECK(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_BUNDLE, pCommandAllocator, nullptr, IID_PPV_ARGS(&m_pCommandBundle)));
+		DX_CHECK(pDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_BUNDLE, IID_PPV_ARGS(&m_pCommandAllocator)));
+		DX_CHECK(pDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_BUNDLE, m_pCommandAllocator, nullptr, IID_PPV_ARGS(&m_pCommandBundle)));
 
-		D3D12_RELEASE(pCommandAllocator); // myb works if dx12 holds an internal reference to it :spinthink:
-
-		// NOTE: Bundles do not work with RenderDoc
-		recordBundleCommands();
+		m_pCommandBundle->Close();
 	}
 
 	void RenderPass::shutdown()
 	{
 		D3D12_RELEASE(m_pCommandBundle);
+		D3D12_RELEASE(m_pCommandAllocator);
 		D3D12_RELEASE(m_pRootSignature);
 		D3D12_RELEASE(m_pPSO);
 	}
 
-	void RenderPass::bind(ID3D12GraphicsCommandList* pDirectCommandList)
+	void RenderPass::bind(ID3D12GraphicsCommandList* pDirectCommandList, uint32_t numRTVs, D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle)
 	{
-		pDirectCommandList->ExecuteBundle(m_pCommandBundle);
+		//pDirectCommandList->ExecuteBundle(m_pCommandBundle);
+
+		// Not supported in bundles
+		// https://learn.microsoft.com/en-us/windows/win32/direct3d12/recording-command-lists-and-bundles#command-list-api-restrictions
+		pDirectCommandList->OMSetRenderTargets(numRTVs, pRtvHandles, false, pDsvHandle);
+		pDirectCommandList->RSSetViewports(1, &m_viewport);
+		pDirectCommandList->RSSetScissorRects(1, &m_scissorRect);
+
+
+
+
+		pDirectCommandList->SetGraphicsRootSignature(m_pRootSignature);
+		pDirectCommandList->SetPipelineState(m_pPSO);
+		pDirectCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	}
 
-	void RenderPass::recordBundleCommands()
+	void RenderPass::updateProperties(D3D12_VIEWPORT viewport, D3D12_RECT scissorRect, D3D12_PRIMITIVE_TOPOLOGY topology)
 	{
-		// Very empty :eyes:
+		m_viewport = viewport;
+		m_scissorRect = scissorRect;
+		
+		//recordBundle(topology);
+	}
+
+	void RenderPass::recordBundle(D3D12_PRIMITIVE_TOPOLOGY topology)
+	{
+		DX_CHECK(m_pCommandAllocator->Reset());
+		DX_CHECK(m_pCommandBundle->Reset(m_pCommandAllocator, nullptr));
 
 		m_pCommandBundle->SetGraphicsRootSignature(m_pRootSignature);
 		m_pCommandBundle->SetPipelineState(m_pPSO);
+		m_pCommandBundle->IASetPrimitiveTopology(topology);
 
 		m_pCommandBundle->Close();
 	}

@@ -74,6 +74,12 @@ namespace Okay
 		descriptor.heapHandle = heapHandle;
 		descriptor.heapSlot = slotOffset;
 
+		descriptor.cpuHandle = heap.pDXDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+		descriptor.gpuHandle = heap.pDXDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+
+		descriptor.cpuHandle.ptr += (uint64_t)heap.incrementSize * descriptor.heapSlot;
+		descriptor.gpuHandle.ptr += (uint64_t)heap.incrementSize * descriptor.heapSlot;
+
 		return descriptor;
 	}
 
@@ -87,28 +93,6 @@ namespace Okay
 	{
 		validateDescriptorHeapHandle(heapHandle);
 		return m_descriptorHeaps[heapHandle].pDXDescriptorHeap;
-	}
-
-	D3D12_CPU_DESCRIPTOR_HANDLE DescriptorHeapStore::getCPUHandle(const Descriptor& descriptor)
-	{
-		validateDescriptorHeapHandle(descriptor.heapHandle);
-		DescriptorHeap& heap = m_descriptorHeaps[descriptor.heapHandle];
-
-		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = heap.pDXDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-		cpuHandle.ptr += (uint64_t)descriptor.heapSlot * heap.incrementSize;
-
-		return cpuHandle;
-	}
-
-	D3D12_GPU_DESCRIPTOR_HANDLE DescriptorHeapStore::getGPUHandle(const Descriptor& descriptor)
-	{
-		validateDescriptorHeapHandle(descriptor.heapHandle);
-		DescriptorHeap& heap = m_descriptorHeaps[descriptor.heapHandle];
-
-		D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = heap.pDXDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
-		gpuHandle.ptr += (uint64_t)descriptor.heapSlot * heap.incrementSize;
-
-		return gpuHandle;
 	}
 
 	DescriptorHeapHandle DescriptorHeapStore::findSufficentCommittedHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type)
