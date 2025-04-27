@@ -26,6 +26,8 @@ namespace Okay
 
 		uint32_t dxMeshId = INVALID_UINT32;
 		std::vector<entt::entity> entities;
+
+		D3D12_GPU_VIRTUAL_ADDRESS objectDatasVA = INVALID_UINT64;
 	};
 
 	class Renderer

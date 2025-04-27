@@ -31,9 +31,9 @@ App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeigh
 	
 		
 	SpotLight& spotLight = spotLightEntity.addComponent<SpotLight>();
-	spotLight.colour = glm::vec3(0.3, 0.5, 0.9f);
+	spotLight.colour = glm::vec3(0.3f, 0.5f, 0.9f);
 	spotLight.intensity = 1.f;
-	spotLight.attenuation = glm::vec2(0.f, 0.f);
+	spotLight.attenuation = glm::vec2(0.f, 0.000001f);
 	spotLight.spreadAngle = 60.f;
 }
 

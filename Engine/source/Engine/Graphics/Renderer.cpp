@@ -246,7 +246,7 @@ namespace Okay
 		pCommandList->ClearDepthStencilView(m_mainDsvCpuHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
 		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(m_shadowMap.resourceHandle), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-		pCommandList->ClearDepthStencilView(m_shadowMapDSV, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr); // promotes?
+		pCommandList->ClearDepthStencilView(m_shadowMapDSV, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 	}
 
 	void Renderer::renderScene(const Scene& scene, D3D12_CPU_DESCRIPTOR_HANDLE currentMainRtv)
@@ -255,11 +255,6 @@ namespace Okay
 		
 		assignObjectDrawGroups(scene);
 		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
-
-		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
-		D3D12_GPU_VIRTUAL_ADDRESS drawGroupObjectDatasVA = m_ringBuffer.getCurrentGPUAddress();
-		uint64_t ringBufferBytesWritten = 0;
-
 
 		const SpotLight& spotLight = scene.getRegistry().get<SpotLight>(scene.getRegistry().view<SpotLight>().front());
 		const Transform& lightTransform = scene.getRegistry().get<Transform>(scene.getRegistry().view<SpotLight>().front());
@@ -271,44 +266,24 @@ namespace Okay
 			glm::perspectiveFovLH_ZO(glm::radians(spotLight.spreadAngle), (float)SHADOW_MAPS_WIDTH, (float)SHADOW_MAPS_HEIGHT, 1.f, 10000.f) *
 			lightTransform.getViewMatrix());
 
-
-		memcpy(pMappedRingBuffer, &renderData, sizeof(GPURenderData));
-		D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = drawGroupObjectDatasVA;
-		pMappedRingBuffer += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
-		drawGroupObjectDatasVA += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
-		ringBufferBytesWritten += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
+		D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = m_ringBuffer.allocate(&renderData, sizeof(GPURenderData));
 
 		m_shadowPass.bind(pCommandList, 0, nullptr, &m_shadowMapDSV);
 		pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
+
 
 		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
 		{
 			DrawGroup& drawGroup = m_drawGroups[i];
 
-			for (entt::entity entity : drawGroup.entities)
-			{
-				auto [meshRenderer, transform] = meshRendererView[entity];
-
-				GPUObjectData* pObjectData = (GPUObjectData*)pMappedRingBuffer;
-				pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
-				pObjectData->diffuseTextureIdx = meshRenderer.diffuseTextureID;
-				pObjectData->normalMapIdx = meshRenderer.normalMapID;
-
-				pMappedRingBuffer += sizeof(GPUObjectData);
-			}
-
 			const DXMesh& dxMesh = m_dxMeshes[drawGroup.dxMeshId];
-
-			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroupObjectDatasVA);
 
 			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticiesGVA);
 			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
 
-			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
+			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroup.objectDatasVA);
 
-			uint64_t bytesWritten = drawGroup.entities.size() * sizeof(GPUObjectData);
-			drawGroupObjectDatasVA += bytesWritten;
-			ringBufferBytesWritten += bytesWritten;
+			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
 		}
 
 
@@ -328,27 +303,19 @@ namespace Okay
 
 		// Render Objects
 	
-		drawGroupObjectDatasVA = m_ringBuffer.getCurrentGPUAddress();
-		drawGroupObjectDatasVA += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
-
 		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
 		{
 			DrawGroup& drawGroup = m_drawGroups[i];
 
 			const DXMesh& dxMesh = m_dxMeshes[drawGroup.dxMeshId];
 
-			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroupObjectDatasVA);
-
 			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticiesGVA);
 			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
 
+			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroup.objectDatasVA);
+
 			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
-
-			uint64_t bytesWritten = drawGroup.entities.size() * sizeof(GPUObjectData);
-			drawGroupObjectDatasVA += bytesWritten;
 		}
-
-		m_ringBuffer.unmap(ringBufferBytesWritten);
 	}
 
 	void Renderer::postRender()
@@ -410,6 +377,36 @@ namespace Okay
 
 			m_drawGroups[drawGroupIdx].entities.emplace_back(entity);
 		}
+
+
+		// Upload ObjectDatas
+
+		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
+		uint8_t* pOrigMappedRingBuffer = pMappedRingBuffer;
+
+		D3D12_GPU_VIRTUAL_ADDRESS drawGroupObjectDatasVA = m_ringBuffer.getCurrentGPUAddress();
+
+		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
+		{
+			DrawGroup& drawGroup = m_drawGroups[i];
+
+			for (entt::entity entity : drawGroup.entities)
+			{
+				auto [meshRenderer, transform] = meshRendererView[entity];
+
+				GPUObjectData* pObjectData = (GPUObjectData*)pMappedRingBuffer;
+				pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
+				pObjectData->diffuseTextureIdx = meshRenderer.diffuseTextureID;
+				pObjectData->normalMapIdx = meshRenderer.normalMapID;
+
+				pMappedRingBuffer += sizeof(GPUObjectData);
+			}
+
+			drawGroup.objectDatasVA = drawGroupObjectDatasVA;
+			drawGroupObjectDatasVA += drawGroup.entities.size() * sizeof(GPUObjectData);
+		}
+
+		m_ringBuffer.unmap((uint64_t)pMappedRingBuffer - (uint64_t)pOrigMappedRingBuffer);
 	}
 
 	void Renderer::createDevice(IDXGIFactory* pFactory)

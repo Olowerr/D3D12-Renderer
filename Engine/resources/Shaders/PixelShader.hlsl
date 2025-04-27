@@ -162,16 +162,16 @@ float4 main(InputData input) : SV_TARGET
         }
 
         
-        float3 positionLightSpace = mul(float4(input.worldPosition, 1.f), spotLight.viewMatrix).xyz;
+        float3 shadowBias = -spotLight.direction * max(2.f * (1.0 - dot(vertexNormal, -worldToLight)), 1.f);
+        float3 positionLightSpace = mul(float4(input.worldPosition + shadowBias, 1.f), spotLight.viewMatrix).xyz;
         float4 worldLightNDC = mul(float4(positionLightSpace, 1.f), spotLight.projMatrix);
 
         worldLightNDC.xyz /= worldLightNDC.w;
         worldLightNDC.xy = float2(worldLightNDC.x * 0.5f + 0.5f, worldLightNDC.y * -0.5f + 0.5f);
         
         float shadowMapDepth = shadowMap.SampleLevel(pointSampler, worldLightNDC.xy, 0).r;
-        float shadowBias = lerp(0.00001f, 0.000001f, max(dot(vertexNormal, worldToLight), 0.f));
         
-        if (shadowMapDepth < worldLightNDC.z - shadowBias)
+        if (shadowMapDepth < worldLightNDC.z)
         {
             continue;
         }
