@@ -4,8 +4,8 @@
 
 using namespace Okay;
 
-App::App(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight)
-	:Application(windowName, windowWidth, windowHeight)
+App::App(std::string_view windowTitle, uint32_t windowWidth, uint32_t windowHeight)
+	:Application(windowTitle, windowWidth, windowHeight)
 {
 	createEntitesFromFile(FilePath("resources") / "sponza" / "sponza.obj", 1.f);
 
@@ -47,6 +47,23 @@ void App::onUpdate(TimeStep dt)
 	updateCamera(dt);
 
 	ImGui::ShowDemoWindow(nullptr);
+
+
+	static float totalDT = 0.f;
+	static uint32_t numFrames = 0;
+
+	totalDT += dt;
+	numFrames += 1;
+
+	if (totalDT >= 1.f)
+	{
+		uint32_t averageFPS = uint32_t(glm::round(1.f / (totalDT / (float)numFrames)));
+
+		m_window.setWindowTitle("D3D12 Renderer - FPS: " + std::to_string(averageFPS));
+
+		totalDT = 0.f;
+		numFrames = 0;
+	}
 }
 
 void App::updateCamera(TimeStep dt)

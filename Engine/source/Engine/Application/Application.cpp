@@ -4,14 +4,14 @@
 
 namespace Okay
 {
-	Application::Application(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight)
+	Application::Application(std::string_view windowTitle, uint32_t windowWidth, uint32_t windowHeight)
 	{
 		glfwInitHint(GLFW_CLIENT_API, GLFW_NO_API);
 
 		bool glInit = glfwInit();
 		OKAY_ASSERT(glInit);
 
-		m_window.initiate(windowName, windowWidth, windowHeight);
+		m_window.initiate(windowTitle, windowWidth, windowHeight);
 		m_renderer.initialize(m_window);
 	}
 

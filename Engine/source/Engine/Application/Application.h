@@ -13,7 +13,7 @@ namespace Okay
 	class Application
 	{
 	public:
-		Application(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight);
+		Application(std::string_view windowTitle, uint32_t windowWidth, uint32_t windowHeight);
 		virtual ~Application();
 
 		void run();
@@ -27,9 +27,9 @@ namespace Okay
 	protected:
 		Scene m_scene;
 		ResourceManager m_resourceManager;
+		Window m_window;
 
 	private:
-		Window m_window;
 		Renderer m_renderer;
 
 	};

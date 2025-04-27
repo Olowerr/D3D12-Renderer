@@ -10,9 +10,9 @@ namespace Okay
 		shutdown();
 	}
 
-	void Window::initiate(std::string_view windowName, uint32_t windowWidth, uint32_t windowHeight)
+	void Window::initiate(std::string_view windowTitle, uint32_t windowWidth, uint32_t windowHeight)
 	{
-		m_pGlfwWindow = glfwCreateWindow((int)windowWidth, (int)windowHeight, windowName.data(), nullptr, nullptr);
+		m_pGlfwWindow = glfwCreateWindow((int)windowWidth, (int)windowHeight, windowTitle.data(), nullptr, nullptr);
 		OKAY_ASSERT(m_pGlfwWindow);
 
 		Input::s_pWindow = this;
@@ -90,6 +90,11 @@ namespace Okay
 	GLFWwindow* Window::getGLFWWindow() const
 	{
 		return m_pGlfwWindow;
+	}
+
+	void Window::setWindowTitle(std::string_view newTitle)
+	{
+		glfwSetWindowTitle(m_pGlfwWindow, newTitle.data());
 	}
 
 	void Window::setInputMode(MouseMode mode)

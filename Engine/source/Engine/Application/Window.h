@@ -17,7 +17,7 @@ namespace Okay
 		Window() = default;
 		virtual ~Window();
 
-		void initiate(std::string_view, uint32_t windowWidth, uint32_t windowHeight);
+		void initiate(std::string_view windowTitle, uint32_t windowWidth, uint32_t windowHeight);
 		void shutdown();
 
 		bool isOpen() const;
@@ -26,12 +26,13 @@ namespace Okay
 		HWND getHWND() const;
 		GLFWwindow* getGLFWWindow() const;
 
+		void setWindowTitle(std::string_view newTitle);
+
 	private:
 		void setInputMode(MouseMode mode);
 		MouseMode getInputMode();
 
 	private:
 		GLFWwindow* m_pGlfwWindow = nullptr;
-
 	};
 }
