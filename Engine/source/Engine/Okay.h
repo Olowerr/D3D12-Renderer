@@ -24,6 +24,7 @@ namespace Okay
 
 	typedef std::filesystem::path FilePath;
 
+	constexpr uint8_t INVALID_UINT8 = UINT8_MAX;
 	constexpr uint16_t INVALID_UINT16 = UINT16_MAX;
 	constexpr uint32_t INVALID_UINT32 = UINT32_MAX;
 	constexpr uint64_t INVALID_UINT64 = UINT64_MAX;

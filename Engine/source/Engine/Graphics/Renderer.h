@@ -30,14 +30,25 @@ namespace Okay
 		D3D12_GPU_VIRTUAL_ADDRESS objectDatasVA = INVALID_UINT64;
 	};
 
+	struct ShadowMap
+	{
+		Allocation textureAllocation = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
+		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
+
+		glm::mat4 viewProjMatrix = glm::mat4(1.f);
+	};
+
 	class Renderer
 	{
 	public:
 		static const uint8_t NUM_BACKBUFFERS = 2;
-		static const uint8_t MAX_MIP_LEVELS = 16; // "Should" be some kind of setting
+		static const uint8_t MAX_MIP_LEVELS = 16;
 
 		static const uint32_t SHADOW_MAPS_WIDTH = 2048;
 		static const uint32_t SHADOW_MAPS_HEIGHT = 2048;
+		static const uint32_t MAX_SHADOW_MAPS = 32;
+
 
 	public:
 		Renderer() = default;
@@ -64,6 +75,8 @@ namespace Okay
 		void fetchBackBuffersAndDSV();
 
 		void createRenderPasses();
+
+		ShadowMap& createShadowMap(uint32_t width, uint32_t height);
 
 		void preProcessMeshes(const std::vector<Mesh>& meshes);
 		void preProcessTextures(const std::vector<Texture>& textures);
@@ -104,9 +117,9 @@ namespace Okay
 
 	private: // Shadows
 		RenderPass m_shadowPass;
-		Allocation m_shadowMap;
-		D3D12_CPU_DESCRIPTOR_HANDLE m_shadowMapDSV;
-		D3D12_GPU_DESCRIPTOR_HANDLE m_shadowMapSRV;
+
+		uint32_t m_numActiveShadowMaps = INVALID_UINT32;
+		std::vector<ShadowMap> m_shadowMapPool;
 
 	private: // Lights
 		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA = INVALID_UINT64;

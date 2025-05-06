@@ -56,7 +56,8 @@ namespace Okay
 
 	void RingBuffer::unmap(uint64_t bytesWritten)
 	{
-		m_pRingBuffer->Unmap(0, nullptr);
+		D3D12_RANGE dbgWriteRange = { m_bufferOffset, alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT) };
+		m_pRingBuffer->Unmap(0, &dbgWriteRange);
 
 		m_bufferOffset += alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
 		OKAY_ASSERT(m_bufferOffset <= m_maxSize);

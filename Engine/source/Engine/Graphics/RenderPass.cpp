@@ -21,22 +21,10 @@ namespace Okay
 		D3D12_RELEASE(m_pPSO);
 	}
 
-	void RenderPass::bind(ID3D12GraphicsCommandList* pDirectCommandList, uint32_t numRTVs, D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle)
+	void RenderPass::bind(ID3D12GraphicsCommandList* pDirectCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle)
 	{
-		//pDirectCommandList->ExecuteBundle(m_pCommandBundle);
-
-		// Not supported in bundles
-		// https://learn.microsoft.com/en-us/windows/win32/direct3d12/recording-command-lists-and-bundles#command-list-api-restrictions
-		pDirectCommandList->OMSetRenderTargets(numRTVs, pRtvHandles, false, pDsvHandle);
-		pDirectCommandList->RSSetViewports(1, &m_viewport);
-		pDirectCommandList->RSSetScissorRects(1, &m_scissorRect);
-
-
-
-
-		pDirectCommandList->SetGraphicsRootSignature(m_pRootSignature);
-		pDirectCommandList->SetPipelineState(m_pPSO);
-		pDirectCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		bindBase(pDirectCommandList);
+		bindRTVs(pDirectCommandList, numRTVs, pRtvHandles, pDsvHandle);
 	}
 
 	void RenderPass::updateProperties(D3D12_VIEWPORT viewport, D3D12_RECT scissorRect, D3D12_PRIMITIVE_TOPOLOGY topology)
@@ -44,7 +32,21 @@ namespace Okay
 		m_viewport = viewport;
 		m_scissorRect = scissorRect;
 		
-		//recordBundle(topology);
+		recordBundle(topology);
+	}
+
+	void RenderPass::bindBase(ID3D12GraphicsCommandList* pDirectCommandList)
+	{
+		pDirectCommandList->ExecuteBundle(m_pCommandBundle);
+	}
+
+	void RenderPass::bindRTVs(ID3D12GraphicsCommandList* pCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle)
+	{
+		// Not supported in bundles
+		// https://learn.microsoft.com/en-us/windows/win32/direct3d12/recording-command-lists-and-bundles#command-list-api-restrictions
+		pCommandList->OMSetRenderTargets(numRTVs, pRtvHandles, false, pDsvHandle);
+		pCommandList->RSSetViewports(1, &m_viewport);
+		pCommandList->RSSetScissorRects(1, &m_scissorRect);
 	}
 
 	void RenderPass::recordBundle(D3D12_PRIMITIVE_TOPOLOGY topology)

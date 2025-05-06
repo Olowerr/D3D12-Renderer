@@ -1,4 +1,9 @@
 
+#define UINT_MAX (~0u)
+#define INVALID_UINT32 UINT_MAX
+
+#define MAX_SHADOW_MAPS 32
+
 // Structs
 struct InputData
 {
@@ -33,8 +38,8 @@ struct DirectionalLight
 
 struct SpotLight
 {
-    float4x4 viewMatrix;
-    float4x4 projMatrix;
+    float4x4 viewProjMatrix;
+    uint shadowMapIdx;
     
     float3 position;
     float3 direction;
@@ -67,7 +72,7 @@ StructuredBuffer<SpotLight> spotLights: register(t5, space0);
 
 // Textures
 Texture2D<unorm float4> textures[256] : register(t2, space1);
-Texture2D<unorm float> shadowMap : register(t6, space0);
+Texture2D<unorm float> shadowMaps[MAX_SHADOW_MAPS] : register(t6, space2);
 
 
 // Samplers
@@ -162,18 +167,22 @@ float4 main(InputData input) : SV_TARGET
         }
 
         
-        float3 shadowBias = -spotLight.direction * max(2.f * (1.0 - dot(vertexNormal, -worldToLight)), 1.f);
-        float3 positionLightSpace = mul(float4(input.worldPosition + shadowBias, 1.f), spotLight.viewMatrix).xyz;
-        float4 worldLightNDC = mul(float4(positionLightSpace, 1.f), spotLight.projMatrix);
-
-        worldLightNDC.xyz /= worldLightNDC.w;
-        worldLightNDC.xy = float2(worldLightNDC.x * 0.5f + 0.5f, worldLightNDC.y * -0.5f + 0.5f);
-        
-        float shadowMapDepth = shadowMap.SampleLevel(pointSampler, worldLightNDC.xy, 0).r;
-        
-        if (shadowMapDepth < worldLightNDC.z)
+        if (spotLight.shadowMapIdx != INVALID_UINT32)
         {
-            continue;
+            float4 worldLightNDC = mul(float4(input.worldPosition, 1.f), spotLight.viewProjMatrix);
+
+            worldLightNDC.xyz /= worldLightNDC.w;
+            worldLightNDC.xy = float2(worldLightNDC.x * 0.5f + 0.5f, worldLightNDC.y * -0.5f + 0.5f);
+        
+            float shadowMapDepth = shadowMaps[spotLight.shadowMapIdx].SampleLevel(pointSampler, worldLightNDC.xy, 0).r;
+            
+            float bias = 0.000001f * tan(acos(max(dot(worldNormal, worldToCamera), 0.f)));
+            bias = clamp(bias, 0, 0.00001f);
+
+            if (shadowMapDepth < worldLightNDC.z - bias)
+            {
+                continue;
+            }
         }
         
         

@@ -8,6 +8,8 @@
 
 namespace Okay
 {
+	static D3D12_RESOURCE_BARRIER s_shadowMapBarriers[Renderer::MAX_SHADOW_MAPS] = {};
+
 	struct GPURenderData
 	{
 		glm::mat4 viewProjMatrix = glm::mat4(1.f);
@@ -39,14 +41,15 @@ namespace Okay
 
 	struct GPUSpotLight
 	{
-		glm::mat4 viewMatrix = glm::mat4(1.f);
-		glm::mat4 projMatrix = glm::mat4(1.f);
+		glm::mat4 viewProjMatrix = glm::mat4(1.f);
+		uint32_t shadowMapIdx = INVALID_UINT32;
 
 		glm::vec3 position = glm::vec3(0.f);
 		glm::vec3 direction = glm::vec3(0.f);
+
 		SpotLight lightData; // spreadAngle is used as the cosine of the spreadAngle in the GPU version
 	};
-	
+
 	template<typename EntityView, typename GPUComponent, typename WriteFunc>
 	static uint64_t writeLightData(EntityView view, GPUComponent* pComponent, WriteFunc writeFunc)
 	{
@@ -97,28 +100,7 @@ namespace Okay
 
 		m_materialTexturesDHH = m_descriptorHeapStore.createDescriptorHeap(256, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-		m_shadowMap = m_gpuResourceManager.createTexture(SHADOW_MAPS_WIDTH, SHADOW_MAPS_HEIGHT, 1, DXGI_FORMAT_R32_TYPELESS, OKAY_TEXTURE_FLAG_DEPTH | OKAY_TEXTURE_FLAG_SHADER_READ, nullptr);
-
-		DescriptorDesc shadowMapDescriptorDesc = {};
-		shadowMapDescriptorDesc.type = OKAY_DESCRIPTOR_TYPE_SRV;
-		shadowMapDescriptorDesc.pDXResource = m_gpuResourceManager.getDXResource(m_shadowMap.resourceHandle);
-		shadowMapDescriptorDesc.nullDesc = false;
-		shadowMapDescriptorDesc.srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		shadowMapDescriptorDesc.srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-		shadowMapDescriptorDesc.srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-		shadowMapDescriptorDesc.srvDesc.Texture2D.MipLevels = 1;
-		shadowMapDescriptorDesc.srvDesc.Texture2D.MostDetailedMip = 0;
-		shadowMapDescriptorDesc.srvDesc.Texture2D.PlaneSlice = 0;
-		shadowMapDescriptorDesc.srvDesc.Texture2D.ResourceMinLODClamp = 0.f;
-		m_shadowMapSRV = m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, 0, &shadowMapDescriptorDesc, 1).gpuHandle;
-
-		shadowMapDescriptorDesc.type = OKAY_DESCRIPTOR_TYPE_DSV;
-		shadowMapDescriptorDesc.dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
-		shadowMapDescriptorDesc.dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-		shadowMapDescriptorDesc.dsvDesc.Texture2D.MipSlice = 0;
-		shadowMapDescriptorDesc.dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
-		m_shadowMapDSV = m_descriptorHeapStore.allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, &shadowMapDescriptorDesc, 1).cpuHandle;
-		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(m_shadowMap.resourceHandle), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		m_shadowMapPool.reserve(MAX_SHADOW_MAPS);
 
 
 		// In this version of Imgui, only 1 SRV is needed, it's stated that future versions will need more, but I don't see a reason to switch version atm :]
@@ -151,9 +133,11 @@ namespace Okay
 
 	void Renderer::render(const Scene& scene)
 	{
+		D3D12_CPU_DESCRIPTOR_HANDLE currentMainRtv = {};
+		uint32_t numShadowMaps = 0;
+
 		updateBuffers(scene);
 
-		D3D12_CPU_DESCRIPTOR_HANDLE currentMainRtv = {};
 		preRender(&currentMainRtv);
 		renderScene(scene, currentMainRtv);
 		postRender();
@@ -171,13 +155,18 @@ namespace Okay
 		const Transform& camTransform = camEntity.getComponent<Transform>();
 		const Camera& cameraComp = camEntity.getComponent<Camera>();
 
+		auto pointLightView = scene.getRegistry().view<PointLight, Transform>();
+		auto directionalLightView = scene.getRegistry().view<DirectionalLight, Transform>();
+		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
+
 
 		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
 		uint64_t ringBufferBytesWritten = 0;
 		uint64_t lightBytesWritten = 0;
 
+		m_numActiveShadowMaps = 0;
+
 		m_pointLightsGVA = m_ringBuffer.getCurrentGPUAddress();
-		auto pointLightView = scene.getRegistry().view<PointLight, Transform>();
 		lightBytesWritten = writeLightData(pointLightView, (GPUPointLight*)pMappedRingBuffer, [](GPUPointLight* pGPUPointLight, const Transform& transform)
 			{
 				pGPUPointLight->position = transform.position;
@@ -187,7 +176,6 @@ namespace Okay
 
 
 		m_directionalLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
-		auto directionalLightView = scene.getRegistry().view<DirectionalLight, Transform>();
 		lightBytesWritten = writeLightData(directionalLightView, (GPUDirectionalLight*)pMappedRingBuffer, [](GPUDirectionalLight* pGPUDirLight, const Transform& transform)
 			{
 				pGPUDirLight->direction = -transform.forwardVec();
@@ -197,19 +185,42 @@ namespace Okay
 
 
 		m_spotLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
-		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
-		lightBytesWritten = writeLightData(spotLightView, (GPUSpotLight*)pMappedRingBuffer, [](GPUSpotLight* pGPUSpotLight, const Transform& transform)
+		lightBytesWritten = writeLightData(spotLightView, (GPUSpotLight*)pMappedRingBuffer, [&](GPUSpotLight* pGPUSpotLight, const Transform& transform)
 			{
-				pGPUSpotLight->viewMatrix = glm::transpose(transform.getViewMatrix());
-				pGPUSpotLight->projMatrix = glm::transpose(glm::perspectiveFovLH_ZO(glm::radians(pGPUSpotLight->lightData.spreadAngle), (float)SHADOW_MAPS_WIDTH, (float)SHADOW_MAPS_HEIGHT, 1.f, 10000.f));
+				float origSpreadAngle = pGPUSpotLight->lightData.spreadAngle;
 
 				pGPUSpotLight->position = transform.position;
 				pGPUSpotLight->direction = transform.forwardVec();
-				pGPUSpotLight->lightData.spreadAngle = glm::cos(glm::radians(pGPUSpotLight->lightData.spreadAngle * 0.5f));
+				pGPUSpotLight->lightData.spreadAngle = glm::cos(glm::radians(origSpreadAngle * 0.5f));
+
+				if (m_numActiveShadowMaps < MAX_SHADOW_MAPS)
+				{
+					ShadowMap* pShadowMap = nullptr;
+					if (m_numActiveShadowMaps >= m_shadowMapPool.size())
+					{
+						pShadowMap = &createShadowMap(SHADOW_MAPS_WIDTH, SHADOW_MAPS_HEIGHT);
+					}
+					else 
+					{
+						pShadowMap = &m_shadowMapPool[m_numActiveShadowMaps];
+					}
+
+					pGPUSpotLight->viewProjMatrix = glm::transpose(
+						glm::perspectiveFovLH_ZO(glm::radians(origSpreadAngle), (float)SHADOW_MAPS_WIDTH, (float)SHADOW_MAPS_HEIGHT, 1.f, 3000.f) *
+						transform.getViewMatrix());
+
+					// Duplicated data but it's fine, the matricies in pShadowMap are used during the depth pass
+					pShadowMap->viewProjMatrix = pGPUSpotLight->viewProjMatrix;
+
+					pGPUSpotLight->shadowMapIdx = m_numActiveShadowMaps++;
+				}
+				else
+				{
+					pGPUSpotLight->shadowMapIdx = INVALID_UINT32;
+				}
 			});
 		ringBufferBytesWritten += lightBytesWritten;
 		pMappedRingBuffer += lightBytesWritten;
-
 
 		GPURenderData renderData{};
 		renderData.cameraPos = camTransform.position;
@@ -245,52 +256,78 @@ namespace Okay
 		pCommandList->ClearRenderTargetView(currentBackBufferRTV, testClearColor, 0, nullptr);
 		pCommandList->ClearDepthStencilView(m_mainDsvCpuHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
-		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(m_shadowMap.resourceHandle), D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-		pCommandList->ClearDepthStencilView(m_shadowMapDSV, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+
+		for (uint32_t i = 0; i < m_numActiveShadowMaps; i++)
+		{
+			s_shadowMapBarriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			s_shadowMapBarriers[i].Transition.pResource = m_gpuResourceManager.getDXResource(m_shadowMapPool[i].textureAllocation.resourceHandle);
+			s_shadowMapBarriers[i].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+			s_shadowMapBarriers[i].Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+			s_shadowMapBarriers[i].Transition.Subresource = 0;
+			s_shadowMapBarriers[i].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+		}
+		pCommandList->ResourceBarrier(m_numActiveShadowMaps, s_shadowMapBarriers);
+
+		for (uint32_t i = 0; i < m_numActiveShadowMaps; i++)
+		{
+			pCommandList->ClearDepthStencilView(m_shadowMapPool[i].dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+		}
 	}
 
 	void Renderer::renderScene(const Scene& scene, D3D12_CPU_DESCRIPTOR_HANDLE currentMainRtv)
 	{
-		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
-		
 		assignObjectDrawGroups(scene);
-		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
 
-		const SpotLight& spotLight = scene.getRegistry().get<SpotLight>(scene.getRegistry().view<SpotLight>().front());
-		const Transform& lightTransform = scene.getRegistry().get<Transform>(scene.getRegistry().view<SpotLight>().front());
+		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
+		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
+		uint64_t ringBufferWrittenBytes = 0;
 
-		GPURenderData renderData{};
-		renderData.cameraPos = lightTransform.position;
-		renderData.cameraDir = lightTransform.forwardVec();
-		renderData.viewProjMatrix = glm::transpose(
-			glm::perspectiveFovLH_ZO(glm::radians(spotLight.spreadAngle), (float)SHADOW_MAPS_WIDTH, (float)SHADOW_MAPS_HEIGHT, 1.f, 10000.f) *
-			lightTransform.getViewMatrix());
+		m_shadowPass.bindBase(pCommandList);
 
-		D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = m_ringBuffer.allocate(&renderData, sizeof(GPURenderData));
-
-		m_shadowPass.bind(pCommandList, 0, nullptr, &m_shadowMapDSV);
-		pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
-
-
-		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
+		for (uint32_t i = 0; i < m_numActiveShadowMaps; i++)
 		{
-			DrawGroup& drawGroup = m_drawGroups[i];
+			const ShadowMap& shadowMap = m_shadowMapPool[i];
 
-			const DXMesh& dxMesh = m_dxMeshes[drawGroup.dxMeshId];
+			GPURenderData* pRenderData = (GPURenderData*)pMappedRingBuffer;
+			pRenderData->viewProjMatrix = shadowMap.viewProjMatrix;
 
-			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticiesGVA);
-			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
+			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = m_ringBuffer.getCurrentGPUAddress() + ringBufferWrittenBytes;
+			pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
 
-			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroup.objectDatasVA);
+			m_shadowPass.bindRTVs(pCommandList, 0, nullptr, &shadowMap.dsvHandle);
 
-			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
+			pMappedRingBuffer += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
+			ringBufferWrittenBytes += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
+
+			for (uint32_t k = 0; k < m_activeDrawGroups; k++)
+			{
+				const DrawGroup& drawGroup = m_drawGroups[k];
+
+				const DXMesh& dxMesh = m_dxMeshes[drawGroup.dxMeshId];
+
+				pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticiesGVA);
+				pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
+
+				pCommandList->SetGraphicsRootShaderResourceView(2, drawGroup.objectDatasVA);
+
+				pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
+			}
+
+			s_shadowMapBarriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			s_shadowMapBarriers[i].Transition.pResource = m_gpuResourceManager.getDXResource(m_shadowMapPool[i].textureAllocation.resourceHandle);
+			s_shadowMapBarriers[i].Transition.StateBefore = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+			s_shadowMapBarriers[i].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+			s_shadowMapBarriers[i].Transition.Subresource = 0;
+			s_shadowMapBarriers[i].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+
 		}
 
+		pCommandList->ResourceBarrier(m_numActiveShadowMaps, s_shadowMapBarriers);
+
+		m_ringBuffer.unmap(ringBufferWrittenBytes);
 
 		m_mainRenderPass.bind(pCommandList, 1, &currentMainRtv, &m_mainDsvCpuHandle);
-
-		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(m_shadowMap.resourceHandle), D3D12_RESOURCE_STATE_DEPTH_WRITE, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-
+		
 		ID3D12DescriptorHeap* pMaterialDXDescHeap = m_descriptorHeapStore.getDXDescriptorHeap(m_materialTexturesDHH);
 		pCommandList->SetDescriptorHeaps(1, &pMaterialDXDescHeap);
 
@@ -382,7 +419,7 @@ namespace Okay
 		// Upload ObjectDatas
 
 		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
-		uint8_t* pOrigMappedRingBuffer = pMappedRingBuffer;
+		uint64_t writtenBytes = 0;
 
 		D3D12_GPU_VIRTUAL_ADDRESS drawGroupObjectDatasVA = m_ringBuffer.getCurrentGPUAddress();
 
@@ -400,13 +437,14 @@ namespace Okay
 				pObjectData->normalMapIdx = meshRenderer.normalMapID;
 
 				pMappedRingBuffer += sizeof(GPUObjectData);
+				writtenBytes += sizeof(GPUObjectData);
 			}
 
 			drawGroup.objectDatasVA = drawGroupObjectDatasVA;
 			drawGroupObjectDatasVA += drawGroup.entities.size() * sizeof(GPUObjectData);
 		}
 
-		m_ringBuffer.unmap((uint64_t)pMappedRingBuffer - (uint64_t)pOrigMappedRingBuffer);
+		m_ringBuffer.unmap(writtenBytes);
 	}
 
 	void Renderer::createDevice(IDXGIFactory* pFactory)
@@ -514,7 +552,7 @@ namespace Okay
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 1, 0)); // Object datas (GPUObjcetData)
 		
 		// At this point we don't know the real number of textures, so just setting a high upper limit
-		D3D12_DESCRIPTOR_RANGE textureDescriptorRanges[2] = { createRangeSRV(2, 1, 256, 1), createRangeSRV(6, 0, 1, 0) };
+		D3D12_DESCRIPTOR_RANGE textureDescriptorRanges[2] = { createRangeSRV(2, 1, 256, MAX_SHADOW_MAPS), createRangeSRV(6, 2, MAX_SHADOW_MAPS, 0) };
 		rootParams.emplace_back(createRootParamTable(D3D12_SHADER_VISIBILITY_PIXEL, textureDescriptorRanges, 2)); // Textures + Shadow maps
 
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_PIXEL, 3, 0)); // Point lights
@@ -546,7 +584,7 @@ namespace Okay
 		// Shadow Pass
 
 		rootParams.clear();
-		rootParams.emplace_back(createRootParamCBV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Main Render Data (GPURenderData)
+		rootParams.emplace_back(createRootParamCBV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Light Data
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Verticies SRV
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 1, 0)); // Object datas (GPUObjcetData)
 
@@ -554,7 +592,7 @@ namespace Okay
 		rootSignatureDesc.pParameters = rootParams.data();
 
 		pipelineDesc = createDefaultGraphicsPipelineStateDesc();
-		pipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+		pipelineDesc.RasterizerState.CullMode = D3D12_CULL_MODE_FRONT;
 		pipelineDesc.NumRenderTargets = 0;
 		pipelineDesc.VS = compileShader(SHADER_PATH / "ShadowVS.hlsl", "vs_5_1", &shaderBlobs[nextBlobIdx++]);
 
@@ -567,6 +605,44 @@ namespace Okay
 		nextBlobIdx = 0;
 		for (ID3DBlob*& pBlob : shaderBlobs)
 			D3D12_RELEASE(pBlob);
+	}
+
+	ShadowMap& Renderer::createShadowMap(uint32_t width, uint32_t height)
+	{
+		ShadowMap& shadowMap = m_shadowMapPool.emplace_back();
+
+		shadowMap.textureAllocation = m_gpuResourceManager.createTexture(width, height, 1, DXGI_FORMAT_R32_TYPELESS,
+			OKAY_TEXTURE_FLAG_DEPTH | OKAY_TEXTURE_FLAG_SHADER_READ, nullptr);
+
+		ID3D12Resource* pDXTexture = m_gpuResourceManager.getDXResource(shadowMap.textureAllocation.resourceHandle);
+
+
+		DescriptorDesc shadowMapDescriptorDesc = {};
+		shadowMapDescriptorDesc.type = OKAY_DESCRIPTOR_TYPE_SRV;
+		shadowMapDescriptorDesc.pDXResource = pDXTexture;
+		shadowMapDescriptorDesc.nullDesc = false;
+		shadowMapDescriptorDesc.srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
+		shadowMapDescriptorDesc.srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		shadowMapDescriptorDesc.srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		shadowMapDescriptorDesc.srvDesc.Texture2D.MipLevels = 1;
+		shadowMapDescriptorDesc.srvDesc.Texture2D.MostDetailedMip = 0;
+		shadowMapDescriptorDesc.srvDesc.Texture2D.PlaneSlice = 0;
+		shadowMapDescriptorDesc.srvDesc.Texture2D.ResourceMinLODClamp = 0.f;
+
+		shadowMap.srvHandle = m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, (uint32_t)m_shadowMapPool.size() - 1, &shadowMapDescriptorDesc, 1).gpuHandle;
+
+
+		shadowMapDescriptorDesc.type = OKAY_DESCRIPTOR_TYPE_DSV;
+		shadowMapDescriptorDesc.dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		shadowMapDescriptorDesc.dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+		shadowMapDescriptorDesc.dsvDesc.Texture2D.MipSlice = 0;
+		shadowMapDescriptorDesc.dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+
+		shadowMap.dsvHandle = m_descriptorHeapStore.allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, &shadowMapDescriptorDesc, 1).cpuHandle;
+
+		m_commandContext.transitionResource(pDXTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+
+		return shadowMap;
 	}
 
 	void Renderer::preProcessMeshes(const std::vector<Mesh>& meshes)
@@ -608,13 +684,15 @@ namespace Okay
 
 	void Renderer::preProcessTextures(const std::vector<Texture>& textures)
 	{
-		for (const Texture& texture : textures)
+		for (uint32_t i = 0; i < (uint32_t)textures.size(); i++)
 		{
+			const Texture& texture = textures[i];
+
 			Allocation textureAlloc = m_gpuResourceManager.createTexture(texture.getWidth(), texture.getHeight(), MAX_MIP_LEVELS,
 				DXGI_FORMAT_R8G8B8A8_UNORM, OKAY_TEXTURE_FLAG_SHADER_READ, texture.getTextureData());
 
 			DescriptorDesc desc = m_gpuResourceManager.createDescriptorDesc(textureAlloc, OKAY_DESCRIPTOR_TYPE_SRV, true);
-			m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, OKAY_DESCRIPTOR_APPEND, &desc, 1);
+			m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, MAX_SHADOW_MAPS + i, &desc, 1);
 		}
 
 		m_gpuResourceManager.generateMipMaps();
