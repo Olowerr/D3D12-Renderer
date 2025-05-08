@@ -49,6 +49,9 @@ namespace Okay
 		static const uint32_t SHADOW_MAPS_HEIGHT = 2048;
 		static const uint32_t MAX_SHADOW_MAPS = 32;
 
+		static const uint32_t DIR_LIGHT_RANGE = 10000;
+		static const uint32_t DIR_LIGHT_SHADOW_WORLD_WIDTH = 4000;
+		static const uint32_t DIR_LIGHT_SHADOW_WORLD_HEIGHT = 4000;
 
 	public:
 		Renderer() = default;
@@ -77,6 +80,7 @@ namespace Okay
 		void createRenderPasses();
 
 		ShadowMap& createShadowMap(uint32_t width, uint32_t height);
+		void trySetShadowMapData(glm::mat4 viewProjMatrix, uint32_t* pOutShadowMapIdx);
 
 		void preProcessMeshes(const std::vector<Mesh>& meshes);
 		void preProcessTextures(const std::vector<Texture>& textures);

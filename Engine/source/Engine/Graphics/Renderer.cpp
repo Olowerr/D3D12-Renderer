@@ -35,6 +35,9 @@ namespace Okay
 
 	struct GPUDirectionalLight
 	{
+		glm::mat4 viewProjMatrix = glm::mat4(1.f);
+		uint32_t shadowMapIdx = INVALID_UINT32;
+
 		glm::vec3 direction = glm::vec3(0.f);
 		DirectionalLight lightData;
 	};
@@ -176,9 +179,45 @@ namespace Okay
 
 
 		m_directionalLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
-		lightBytesWritten = writeLightData(directionalLightView, (GPUDirectionalLight*)pMappedRingBuffer, [](GPUDirectionalLight* pGPUDirLight, const Transform& transform)
+		lightBytesWritten = writeLightData(directionalLightView, (GPUDirectionalLight*)pMappedRingBuffer, [&](GPUDirectionalLight* pGPUDirLight, const Transform& transform)
 			{
 				pGPUDirLight->direction = -transform.forwardVec();
+
+				float halfShadowWorldWidth = DIR_LIGHT_SHADOW_WORLD_WIDTH * 0.5f;
+				float halfShadowWorldHeight = DIR_LIGHT_SHADOW_WORLD_HEIGHT * 0.5f;
+
+				// Snapping doesn't work :why:
+
+				float texelWorldWidth = DIR_LIGHT_SHADOW_WORLD_WIDTH / (float)SHADOW_MAPS_WIDTH;
+				float texelWorldHeight = DIR_LIGHT_SHADOW_WORLD_HEIGHT / (float)SHADOW_MAPS_HEIGHT;
+
+				glm::vec3 lightFocus = {};
+				lightFocus.x = float(glm::floor(camTransform.position.x / texelWorldWidth) * texelWorldWidth);
+				lightFocus.y = float(glm::floor(camTransform.position.y / texelWorldHeight) * texelWorldHeight);
+				lightFocus.z = float(glm::floor(camTransform.position.z / texelWorldWidth) * texelWorldWidth);
+
+				glm::vec3 lightOrigin = {};
+				lightOrigin.x = float(glm::floor((lightFocus.x + pGPUDirLight->direction.x * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldWidth) * texelWorldWidth);
+				lightOrigin.y = float(glm::floor((lightFocus.y + pGPUDirLight->direction.y * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldHeight) * texelWorldHeight);
+				lightOrigin.z = float(glm::floor((lightFocus.z + pGPUDirLight->direction.z * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldWidth) * texelWorldWidth);
+
+				pGPUDirLight->viewProjMatrix = glm::transpose(
+					glm::orthoLH_ZO(-halfShadowWorldWidth, halfShadowWorldWidth, -halfShadowWorldHeight, halfShadowWorldHeight, 1.f, (float)DIR_LIGHT_RANGE) *
+					glm::lookAtLH(lightOrigin, lightFocus, glm::vec3(0.f, 1.f, 0.f)));
+
+				trySetShadowMapData(pGPUDirLight->viewProjMatrix, &pGPUDirLight->shadowMapIdx);
+
+				/*
+					Shadow map improvement techniques
+					https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps
+
+					Frustum Culling (extracting frustum planes)
+					https://learnopengl.com/Guest-Articles/2021/Scene/Frustum-Culling
+
+					// EXtracting frustum planes from matrix
+					https://www.reddit.com/r/gamedev/comments/xj47t/does_glm_support_frustum_plane_extraction/
+				*/
+
 			});
 		ringBufferBytesWritten += lightBytesWritten;
 		pMappedRingBuffer += lightBytesWritten;
@@ -193,31 +232,11 @@ namespace Okay
 				pGPUSpotLight->direction = transform.forwardVec();
 				pGPUSpotLight->lightData.spreadAngle = glm::cos(glm::radians(origSpreadAngle * 0.5f));
 
-				if (m_numActiveShadowMaps < MAX_SHADOW_MAPS)
-				{
-					ShadowMap* pShadowMap = nullptr;
-					if (m_numActiveShadowMaps >= m_shadowMapPool.size())
-					{
-						pShadowMap = &createShadowMap(SHADOW_MAPS_WIDTH, SHADOW_MAPS_HEIGHT);
-					}
-					else 
-					{
-						pShadowMap = &m_shadowMapPool[m_numActiveShadowMaps];
-					}
+				pGPUSpotLight->viewProjMatrix = glm::transpose(
+					glm::perspectiveFovLH_ZO(glm::radians(origSpreadAngle), (float)SHADOW_MAPS_WIDTH, (float)SHADOW_MAPS_HEIGHT, 1.f, 3000.f) *
+					transform.getViewMatrix());
 
-					pGPUSpotLight->viewProjMatrix = glm::transpose(
-						glm::perspectiveFovLH_ZO(glm::radians(origSpreadAngle), (float)SHADOW_MAPS_WIDTH, (float)SHADOW_MAPS_HEIGHT, 1.f, 3000.f) *
-						transform.getViewMatrix());
-
-					// Duplicated data but it's fine, the matricies in pShadowMap are used during the depth pass
-					pShadowMap->viewProjMatrix = pGPUSpotLight->viewProjMatrix;
-
-					pGPUSpotLight->shadowMapIdx = m_numActiveShadowMaps++;
-				}
-				else
-				{
-					pGPUSpotLight->shadowMapIdx = INVALID_UINT32;
-				}
+				trySetShadowMapData(pGPUSpotLight->viewProjMatrix, &pGPUSpotLight->shadowMapIdx);
 			});
 		ringBufferBytesWritten += lightBytesWritten;
 		pMappedRingBuffer += lightBytesWritten;
@@ -643,6 +662,28 @@ namespace Okay
 		m_commandContext.transitionResource(pDXTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 		return shadowMap;
+	}
+
+	void Renderer::trySetShadowMapData(glm::mat4 viewProjMatrix, uint32_t* pOutShadowMapIdx)
+	{
+		if (m_numActiveShadowMaps >= MAX_SHADOW_MAPS)
+		{
+			*pOutShadowMapIdx = INVALID_UINT32;
+			return;
+		}
+
+		ShadowMap* pShadowMap = nullptr;
+		if (m_numActiveShadowMaps >= m_shadowMapPool.size())
+		{
+			pShadowMap = &createShadowMap(SHADOW_MAPS_WIDTH, SHADOW_MAPS_HEIGHT);
+		}
+		else
+		{
+			pShadowMap = &m_shadowMapPool[m_numActiveShadowMaps];
+		}
+
+		pShadowMap->viewProjMatrix = viewProjMatrix;
+		*pOutShadowMapIdx = m_numActiveShadowMaps++;
 	}
 
 	void Renderer::preProcessMeshes(const std::vector<Mesh>& meshes)

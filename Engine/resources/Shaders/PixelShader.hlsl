@@ -31,6 +31,9 @@ struct PointLight
 
 struct DirectionalLight
 {
+    float4x4 viewProjMatrix;
+    uint shadowMapIdx;
+
     float3 direction;
     float3 colour;
     float intensity;
@@ -93,6 +96,26 @@ float3 sampleNormalMap(uint normalMapIdx, float2 uv, float3x3 tbnMatrix)
     return normalize(mul(normal, tbnMatrix));
 }
 
+float getShadowMapValue(uint shadowMapIdx, float4x4 lightViewProjMatrix, float3 worldNormal, float3 worldToLight, float3 worldPosition)
+{
+    if (shadowMapIdx == INVALID_UINT32)
+    {
+        return 0.f;
+    }
+
+    float4 worldLightNDC = mul(float4(worldPosition, 1.f), lightViewProjMatrix);
+
+    worldLightNDC.xyz /= worldLightNDC.w;
+    worldLightNDC.xy = float2(worldLightNDC.x * 0.5f + 0.5f, worldLightNDC.y * -0.5f + 0.5f);
+        
+    float shadowMapDepth = shadowMaps[shadowMapIdx].SampleLevel(pointSampler, worldLightNDC.xy, 0).r;
+            
+    float bias = 0.000001f * tan(acos(max(dot(worldNormal, worldToLight), 0.f)));
+    bias = clamp(bias, 0, 0.00001f);
+
+    return shadowMapDepth > worldLightNDC.z - bias;
+}
+
 float4 main(InputData input) : SV_TARGET
 {
     uint normalMapTextureIdx = objectDatas[input.instanceID].normalMapIdx;
@@ -137,18 +160,21 @@ float4 main(InputData input) : SV_TARGET
     
     for (i = 0; i < numDirectionalLights; i++)
     {
-        break;
         DirectionalLight dirLight = directionalLights[i];
         
+        float shadowValue = getShadowMapValue(dirLight.shadowMapIdx, dirLight.viewProjMatrix, worldNormal, dirLight.direction, input.worldPosition);
+
+
         float dotty = max(dot(dirLight.direction, worldNormal), 0.f);
-        diffuseLight += dirLight.colour * dirLight.intensity * dotty;
+        diffuseLight += shadowValue * dirLight.colour * dirLight.intensity * dotty;
        
 
         float3 lightReflection = reflect(-dirLight.direction, worldNormal);
         float specularIntensity = max(dot(lightReflection, worldToCamera), 0.f);
         specularIntensity = pow(specularIntensity, specularExpontent);
         
-        specularLight += dirLight.colour * dirLight.intensity * specularIntensity;
+
+        specularLight += shadowValue * dirLight.colour * dirLight.intensity * specularIntensity;
     }
 
     
@@ -163,40 +189,24 @@ float4 main(InputData input) : SV_TARGET
         
         if (dot(-worldToLight, spotLight.direction) < spotLight.cosineSpreadAngle)
         {
-            continue;
+            continue; // Change to float value which we multiple by?
         }
 
-        
-        if (spotLight.shadowMapIdx != INVALID_UINT32)
-        {
-            float4 worldLightNDC = mul(float4(input.worldPosition, 1.f), spotLight.viewProjMatrix);
-
-            worldLightNDC.xyz /= worldLightNDC.w;
-            worldLightNDC.xy = float2(worldLightNDC.x * 0.5f + 0.5f, worldLightNDC.y * -0.5f + 0.5f);
-        
-            float shadowMapDepth = shadowMaps[spotLight.shadowMapIdx].SampleLevel(pointSampler, worldLightNDC.xy, 0).r;
-            
-            float bias = 0.000001f * tan(acos(max(dot(worldNormal, worldToCamera), 0.f)));
-            bias = clamp(bias, 0, 0.00001f);
-
-            if (shadowMapDepth < worldLightNDC.z - bias)
-            {
-                continue;
-            }
-        }
+        float shadowValue = getShadowMapValue(spotLight.shadowMapIdx, spotLight.viewProjMatrix, worldNormal, worldToLight, input.worldPosition);
         
         
         float dotty = max(dot(worldToLight, worldNormal), 0.f);
         float attenuation = 1.f / (1.f + spotLight.attenuation.x * distance + spotLight.attenuation.y * distance * distance);
         
-        diffuseLight += spotLight.colour * spotLight.intensity * dotty * attenuation;
+
+        diffuseLight += shadowValue * spotLight.colour * spotLight.intensity * dotty * attenuation;
        
         
         float3 lightReflection = reflect(-worldToLight, worldNormal);
         float specularIntensity = max(dot(lightReflection, worldToCamera), 0.f);
         specularIntensity = pow(specularIntensity, specularExpontent);
         
-        specularLight += spotLight.colour * spotLight.intensity * specularIntensity * attenuation;
+        specularLight += shadowValue * spotLight.colour * spotLight.intensity * specularIntensity * attenuation;
     }
 
     
