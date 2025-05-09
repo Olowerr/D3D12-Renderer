@@ -6552,6 +6552,9 @@ GLFWAPI VkResult glfwCreateWindowSurface(VkInstance instance, GLFWwindow* window
 
 /* -------------------- END SYSTEM/COMPILER SPECIFIC --------------------- */
 
+#ifdef APIENTRY
+ #undef APIENTRY
+#endif
 
 #ifdef __cplusplus
 }
