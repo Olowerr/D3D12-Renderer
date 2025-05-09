@@ -30,7 +30,10 @@ namespace Okay
 	struct GPUPointLight
 	{
 		glm::vec3 position = glm::vec3(0.f);
-		PointLight lightData;
+
+		glm::vec3 colour = glm::vec3(1.f);
+		float intensity = 1.f;
+		glm::vec2 attenuation = glm::vec2(0.f, 1.f);
 	};
 
 	struct GPUDirectionalLight
@@ -39,7 +42,9 @@ namespace Okay
 		uint32_t shadowMapIdx = INVALID_UINT32;
 
 		glm::vec3 direction = glm::vec3(0.f);
-		DirectionalLight lightData;
+
+		glm::vec3 colour = glm::vec3(1.f);
+		float intensity = 1.f;
 	};
 
 	struct GPUSpotLight
@@ -50,24 +55,12 @@ namespace Okay
 		glm::vec3 position = glm::vec3(0.f);
 		glm::vec3 direction = glm::vec3(0.f);
 
-		SpotLight lightData; // spreadAngle is used as the cosine of the spreadAngle in the GPU version
+		glm::vec3 colour = glm::vec3(1.f);
+		float intensity = 1.f;
+
+		glm::vec2 attenuation = glm::vec2(0.f, 1.f);
+		float spreadCosAngle = 90.f;
 	};
-
-	template<typename EntityView, typename GPUComponent, typename WriteFunc>
-	static uint64_t writeLightData(EntityView view, GPUComponent* pComponent, WriteFunc writeFunc)
-	{
-		for (entt::entity entity : view)
-		{
-			auto [lightComp, transform] = view[entity];
-
-			pComponent->lightData = lightComp;
-			writeFunc(pComponent, transform);
-
-			pComponent += 1;
-		}
-
-		return alignAddress64(view.size_hint() * sizeof(GPUComponent), BUFFER_DATA_ALIGNMENT);
-	}
 
 	void Renderer::initialize(const Window& window)
 	{
@@ -162,84 +155,21 @@ namespace Okay
 		auto directionalLightView = scene.getRegistry().view<DirectionalLight, Transform>();
 		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
 
-
 		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
-		uint64_t ringBufferBytesWritten = 0;
-		uint64_t lightBytesWritten = 0;
+		uint64_t ringBufferOffset = 0;
 
 		m_numActiveShadowMaps = 0;
 
-		m_pointLightsGVA = m_ringBuffer.getCurrentGPUAddress();
-		lightBytesWritten = writeLightData(pointLightView, (GPUPointLight*)pMappedRingBuffer, [](GPUPointLight* pGPUPointLight, const Transform& transform)
-			{
-				pGPUPointLight->position = transform.position;
-			});
-		ringBufferBytesWritten += lightBytesWritten;
-		pMappedRingBuffer += lightBytesWritten;
 
+		m_pointLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferOffset;
+		ringBufferOffset += writePointLightData(pointLightView, pMappedRingBuffer + ringBufferOffset);
 
-		m_directionalLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
-		lightBytesWritten = writeLightData(directionalLightView, (GPUDirectionalLight*)pMappedRingBuffer, [&](GPUDirectionalLight* pGPUDirLight, const Transform& transform)
-			{
-				pGPUDirLight->direction = -transform.forwardVec();
+		m_directionalLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferOffset;
+		ringBufferOffset += writeDirLightData(directionalLightView, pMappedRingBuffer + ringBufferOffset, camTransform);
 
-				float halfShadowWorldWidth = DIR_LIGHT_SHADOW_WORLD_WIDTH * 0.5f;
-				float halfShadowWorldHeight = DIR_LIGHT_SHADOW_WORLD_HEIGHT * 0.5f;
+		m_spotLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferOffset;
+		ringBufferOffset += writeSpotLightData(spotLightView, pMappedRingBuffer + ringBufferOffset);
 
-				// Snapping doesn't work :why:
-
-				float texelWorldWidth = DIR_LIGHT_SHADOW_WORLD_WIDTH / (float)SHADOW_MAPS_WIDTH;
-				float texelWorldHeight = DIR_LIGHT_SHADOW_WORLD_HEIGHT / (float)SHADOW_MAPS_HEIGHT;
-
-				glm::vec3 lightFocus = {};
-				lightFocus.x = float(glm::floor(camTransform.position.x / texelWorldWidth) * texelWorldWidth);
-				lightFocus.y = float(glm::floor(camTransform.position.y / texelWorldHeight) * texelWorldHeight);
-				lightFocus.z = float(glm::floor(camTransform.position.z / texelWorldWidth) * texelWorldWidth);
-
-				glm::vec3 lightOrigin = {};
-				lightOrigin.x = float(glm::floor((lightFocus.x + pGPUDirLight->direction.x * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldWidth) * texelWorldWidth);
-				lightOrigin.y = float(glm::floor((lightFocus.y + pGPUDirLight->direction.y * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldHeight) * texelWorldHeight);
-				lightOrigin.z = float(glm::floor((lightFocus.z + pGPUDirLight->direction.z * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldWidth) * texelWorldWidth);
-
-				pGPUDirLight->viewProjMatrix = glm::transpose(
-					glm::orthoLH_ZO(-halfShadowWorldWidth, halfShadowWorldWidth, -halfShadowWorldHeight, halfShadowWorldHeight, 1.f, (float)DIR_LIGHT_RANGE) *
-					glm::lookAtLH(lightOrigin, lightFocus, glm::vec3(0.f, 1.f, 0.f)));
-
-				trySetShadowMapData(pGPUDirLight->viewProjMatrix, &pGPUDirLight->shadowMapIdx);
-
-				/*
-					Shadow map improvement techniques
-					https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps
-
-					Frustum Culling (extracting frustum planes)
-					https://learnopengl.com/Guest-Articles/2021/Scene/Frustum-Culling
-
-					// EXtracting frustum planes from matrix
-					https://www.reddit.com/r/gamedev/comments/xj47t/does_glm_support_frustum_plane_extraction/
-				*/
-
-			});
-		ringBufferBytesWritten += lightBytesWritten;
-		pMappedRingBuffer += lightBytesWritten;
-
-
-		m_spotLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
-		lightBytesWritten = writeLightData(spotLightView, (GPUSpotLight*)pMappedRingBuffer, [&](GPUSpotLight* pGPUSpotLight, const Transform& transform)
-			{
-				float origSpreadAngle = pGPUSpotLight->lightData.spreadAngle;
-
-				pGPUSpotLight->position = transform.position;
-				pGPUSpotLight->direction = transform.forwardVec();
-				pGPUSpotLight->lightData.spreadAngle = glm::cos(glm::radians(origSpreadAngle * 0.5f));
-
-				pGPUSpotLight->viewProjMatrix = glm::transpose(
-					glm::perspectiveFovLH_ZO(glm::radians(origSpreadAngle), (float)SHADOW_MAPS_WIDTH, (float)SHADOW_MAPS_HEIGHT, 1.f, 3000.f) *
-					transform.getViewMatrix());
-
-				trySetShadowMapData(pGPUSpotLight->viewProjMatrix, &pGPUSpotLight->shadowMapIdx);
-			});
-		ringBufferBytesWritten += lightBytesWritten;
-		pMappedRingBuffer += lightBytesWritten;
 
 		GPURenderData renderData{};
 		renderData.cameraPos = camTransform.position;
@@ -250,14 +180,11 @@ namespace Okay
 		renderData.numDirectionalLights = (uint32_t)directionalLightView.size_hint();
 		renderData.numSpotLights = (uint32_t)spotLightView.size_hint();
 
-		m_renderDataGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferBytesWritten;
-		memcpy(pMappedRingBuffer, &renderData, sizeof(GPURenderData));
+		m_renderDataGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferOffset;
+		memcpy(pMappedRingBuffer + ringBufferOffset, &renderData, sizeof(GPURenderData));
+		ringBufferOffset += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
 
-		ringBufferBytesWritten += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
-		pMappedRingBuffer = (uint8_t*)alignAddress64((uint64_t)pMappedRingBuffer, BUFFER_DATA_ALIGNMENT);
-
-
-		m_ringBuffer.unmap(ringBufferBytesWritten);
+		m_ringBuffer.unmap(ringBufferOffset);
 	}
 
 	void Renderer::preRender(D3D12_CPU_DESCRIPTOR_HANDLE* pOutCurrentBB)
@@ -737,6 +664,112 @@ namespace Okay
 		}
 
 		m_gpuResourceManager.generateMipMaps();
+	}
+
+	template<typename ComponentView>
+	uint64_t Renderer::writePointLightData(ComponentView& view, uint8_t* pWriteLocation)
+	{
+		uint64_t bytesWritten = 0;
+		for (entt::entity entity : view)
+		{
+			GPUPointLight* pGpuPointLight = (GPUPointLight*)(pWriteLocation + bytesWritten);
+			bytesWritten += sizeof(GPUPointLight);
+
+			auto [pointLight, transform] = view[entity];
+
+			pGpuPointLight->colour = pointLight.colour;
+			pGpuPointLight->intensity = pointLight.intensity;
+			pGpuPointLight->attenuation = pointLight.attenuation;
+
+			pGpuPointLight->position = transform.position;
+		}
+
+		return alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
+	}
+
+	template<typename ComponentView>
+	uint64_t Renderer::writeSpotLightData(ComponentView& view, uint8_t* pWriteLocation)
+	{
+		uint64_t bytesWritten = 0;
+		for (entt::entity entity : view)
+		{
+			GPUSpotLight* pGpuSpotLight = (GPUSpotLight*)(pWriteLocation + bytesWritten);
+			bytesWritten += sizeof(GPUSpotLight);
+
+			auto [spotLight, transform] = view[entity];
+
+			pGpuSpotLight->colour = spotLight.colour;
+			pGpuSpotLight->intensity = spotLight.intensity;
+			pGpuSpotLight->attenuation = spotLight.attenuation;
+			pGpuSpotLight->spreadCosAngle = glm::cos(glm::radians(spotLight.spreadAngle * 0.5f));
+
+			pGpuSpotLight->position = transform.position;
+			pGpuSpotLight->direction = transform.forwardVec();
+
+			pGpuSpotLight->viewProjMatrix = glm::transpose(
+				glm::perspectiveFovLH_ZO(glm::radians(spotLight.spreadAngle), (float)SHADOW_MAPS_WIDTH, (float)SHADOW_MAPS_HEIGHT, 1.f, 3000.f) *
+				transform.getViewMatrix());
+
+			trySetShadowMapData(pGpuSpotLight->viewProjMatrix, &pGpuSpotLight->shadowMapIdx);
+		}
+
+		return alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
+	}
+
+	template<typename ComponentView>
+	uint64_t Renderer::writeDirLightData(ComponentView& view, uint8_t* pWriteLocation, const Transform& camTransform)
+	{
+		uint64_t bytesWritten = 0;
+		for (entt::entity entity : view)
+		{
+			GPUDirectionalLight* pGpuDirLight = (GPUDirectionalLight*)(pWriteLocation + bytesWritten);
+			bytesWritten += sizeof(GPUDirectionalLight);
+			
+			auto [directionalLight, transform] = view[entity];
+
+
+			pGpuDirLight->colour = directionalLight.colour;
+			pGpuDirLight->intensity = directionalLight.intensity;
+
+			pGpuDirLight->direction = -transform.forwardVec();
+
+			float halfShadowWorldWidth = DIR_LIGHT_SHADOW_WORLD_WIDTH * 0.5f;
+			float halfShadowWorldHeight = DIR_LIGHT_SHADOW_WORLD_HEIGHT * 0.5f;
+
+			// Snapping doesn't work ;_;
+
+			float texelWorldWidth = DIR_LIGHT_SHADOW_WORLD_WIDTH / (float)SHADOW_MAPS_WIDTH;
+			float texelWorldHeight = DIR_LIGHT_SHADOW_WORLD_HEIGHT / (float)SHADOW_MAPS_HEIGHT;
+
+			glm::vec3 lightFocus = {};
+			lightFocus.x = float(glm::floor(camTransform.position.x / texelWorldWidth) * texelWorldWidth);
+			lightFocus.y = float(glm::floor(camTransform.position.y / texelWorldHeight) * texelWorldHeight);
+			lightFocus.z = float(glm::floor(camTransform.position.z / texelWorldWidth) * texelWorldWidth);
+
+			glm::vec3 lightOrigin = {};
+			lightOrigin.x = float(glm::floor((lightFocus.x + pGpuDirLight->direction.x * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldWidth) * texelWorldWidth);
+			lightOrigin.y = float(glm::floor((lightFocus.y + pGpuDirLight->direction.y * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldHeight) * texelWorldHeight);
+			lightOrigin.z = float(glm::floor((lightFocus.z + pGpuDirLight->direction.z * (float)DIR_LIGHT_RANGE * 0.5f) / texelWorldWidth) * texelWorldWidth);
+
+			pGpuDirLight->viewProjMatrix = glm::transpose(
+				glm::orthoLH_ZO(-halfShadowWorldWidth, halfShadowWorldWidth, -halfShadowWorldHeight, halfShadowWorldHeight, 1.f, (float)DIR_LIGHT_RANGE) *
+				glm::lookAtLH(lightOrigin, lightFocus, glm::vec3(0.f, 1.f, 0.f)));
+
+			trySetShadowMapData(pGpuDirLight->viewProjMatrix, &pGpuDirLight->shadowMapIdx);
+
+			/*
+				Shadow map improvement techniques
+				https://learn.microsoft.com/en-us/windows/win32/dxtecharts/common-techniques-to-improve-shadow-depth-maps
+
+				Frustum Culling (extracting frustum planes)
+				https://learnopengl.com/Guest-Articles/2021/Scene/Frustum-Culling
+
+				// EXtracting frustum planes from matrix
+				https://www.reddit.com/r/gamedev/comments/xj47t/does_glm_support_frustum_plane_extraction/
+			*/
+		}
+
+		return alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
 	}
 
 	void Renderer::enableDebugLayer()

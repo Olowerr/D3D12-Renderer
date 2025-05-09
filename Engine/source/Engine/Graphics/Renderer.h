@@ -85,6 +85,15 @@ namespace Okay
 		void preProcessMeshes(const std::vector<Mesh>& meshes);
 		void preProcessTextures(const std::vector<Texture>& textures);
 
+		template<typename ComponentView> // Template because the ENTT view types are cray cray
+		uint64_t writePointLightData(ComponentView& view, uint8_t* pWriteLocation);
+		
+		template<typename ComponentView> // Template because the ENTT view types are cray cray
+		uint64_t writeSpotLightData(ComponentView& view, uint8_t* pWriteLocation);
+		
+		template<typename ComponentView> // Template because the ENTT view types are cray cray
+		uint64_t writeDirLightData(ComponentView& view, uint8_t* pWriteLocation, const Transform& camTransform);
+
 		void enableDebugLayer();
 		void enableGPUBasedValidation();
 

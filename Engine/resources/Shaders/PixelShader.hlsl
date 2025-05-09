@@ -136,7 +136,6 @@ float4 main(InputData input) : SV_TARGET
     uint i = 0;
     for (i = 0; i < numPointLights; i++)
     {
-        break;
         PointLight pointLight = pointLights[i];
         
         float3 worldToLight = pointLight.position - input.worldPosition;

@@ -32,12 +32,16 @@ namespace Okay
 		m_viewport = viewport;
 		m_scissorRect = scissorRect;
 		
-		recordBundle(topology);
+		//recordBundle(topology);
 	}
 
 	void RenderPass::bindBase(ID3D12GraphicsCommandList* pDirectCommandList)
 	{
-		pDirectCommandList->ExecuteBundle(m_pCommandBundle);
+		//pDirectCommandList->ExecuteBundle(m_pCommandBundle);
+
+		pDirectCommandList->SetGraphicsRootSignature(m_pRootSignature);
+		pDirectCommandList->SetPipelineState(m_pPSO);
+		pDirectCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	}
 
 	void RenderPass::bindRTVs(ID3D12GraphicsCommandList* pCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle)
