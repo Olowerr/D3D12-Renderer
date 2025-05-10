@@ -16,6 +16,16 @@ App::App(std::string_view windowTitle, uint32_t windowWidth, uint32_t windowHeig
 	PointLight& pointLight = m_camEntity.addComponent<PointLight>();
 	pointLight.colour = glm::vec3(0.9f, 0.2f, 0.4f);
 	pointLight.intensity = 10.f;
+	pointLight.shadowSource = false;
+
+
+	Entity bulbEntity = m_scene.createEntity();
+	bulbEntity.getComponent<Transform>().position = glm::vec3(487.f, 145.f, 217.f);
+	PointLight& bulbLight = bulbEntity.addComponent<PointLight>();
+	bulbLight.colour = glm::vec3(1.f, 0.3f, 0.4f);
+	bulbLight.intensity = 1.f;
+	bulbLight.attenuation = glm::vec2(0.f, 0.000001f);
+
 
 	Entity sun = m_scene.createEntity();
 	sun.getComponent<Transform>().rotation = glm::vec3(45.f, 45.f, 0.f);
@@ -26,24 +36,23 @@ App::App(std::string_view windowTitle, uint32_t windowWidth, uint32_t windowHeig
 
 
 	Entity spotLightEntity = m_scene.createEntity();
-	spotLightEntity.getComponent<Transform>().position = glm::vec3(847.f, 366.f, -166.f);
-	spotLightEntity.getComponent<Transform>().rotation = glm::vec3(27.1f, -62.5f, 0.f);
+	spotLightEntity.getComponent<Transform>().position = glm::vec3(-960.f, 443.f, 221.f);
+	spotLightEntity.getComponent<Transform>().rotation = glm::vec3(29.f, -248.f, 0.f);
 	
 	SpotLight& spotLight = spotLightEntity.addComponent<SpotLight>();
 	spotLight.colour = glm::vec3(0.3f, 0.5f, 0.9f);
-	spotLight.intensity = 1.f;
+	spotLight.intensity = 0.5f;
 	spotLight.attenuation = glm::vec2(0.f, 0.00000001f);
 	spotLight.spreadAngle = 60.f;
 
-
-
+	
 	Entity spotLightEntity2 = m_scene.createEntity();
 	spotLightEntity2.getComponent<Transform>().position = glm::vec3(-973.f, 343.f, -142.f);
 	spotLightEntity2.getComponent<Transform>().rotation = glm::vec3(26.f, -284.f, 0.f);
 
 	SpotLight& spotLight2 = spotLightEntity2.addComponent<SpotLight>();
 	spotLight2.colour = glm::vec3(0.9f, 0.5f, 0.3f);
-	spotLight2.intensity = 1.f;
+	spotLight2.intensity = 0.7f;
 	spotLight2.attenuation = glm::vec2(0.f, 0.00000001f);
 	spotLight2.spreadAngle = 90.f;
 }

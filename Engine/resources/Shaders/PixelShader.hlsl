@@ -3,6 +3,7 @@
 #define INVALID_UINT32 UINT_MAX
 
 #define MAX_SHADOW_MAPS 32
+#define MAX_POINT_SHADOW_CUBES 8
 
 // Structs
 struct InputData
@@ -23,6 +24,9 @@ struct ObjectData
 
 struct PointLight
 {
+    uint shadowMapIdx;
+    float farPlane;
+
     float3 position;
     float3 colour;
     float intensity;
@@ -63,6 +67,7 @@ cbuffer RenderDataCBuffer : register(b0, space0)
     float3 cameraDir;
     uint numDirectionalLights;
     uint numSpotLights;
+    float farPlane;
 }
 
 
@@ -76,6 +81,7 @@ StructuredBuffer<SpotLight> spotLights: register(t5, space0);
 // Textures
 Texture2D<unorm float4> textures[256] : register(t2, space1);
 Texture2D<unorm float> shadowMaps[MAX_SHADOW_MAPS] : register(t6, space2);
+TextureCube<unorm float> shadowMapCubes[MAX_POINT_SHADOW_CUBES] : register(t7, space3);
 
 
 // Samplers
@@ -96,7 +102,7 @@ float3 sampleNormalMap(uint normalMapIdx, float2 uv, float3x3 tbnMatrix)
     return normalize(mul(normal, tbnMatrix));
 }
 
-float getShadowMapValue(uint shadowMapIdx, float4x4 lightViewProjMatrix, float3 worldNormal, float3 worldToLight, float3 worldPosition)
+float getShadowValue(uint shadowMapIdx, float4x4 lightViewProjMatrix, float3 worldNormal, float3 worldToLight, float3 worldPosition)
 {
     if (shadowMapIdx == INVALID_UINT32)
     {
@@ -108,12 +114,25 @@ float getShadowMapValue(uint shadowMapIdx, float4x4 lightViewProjMatrix, float3 
     worldLightNDC.xyz /= worldLightNDC.w;
     worldLightNDC.xy = float2(worldLightNDC.x * 0.5f + 0.5f, worldLightNDC.y * -0.5f + 0.5f);
         
-    float shadowMapDepth = shadowMaps[shadowMapIdx].SampleLevel(pointSampler, worldLightNDC.xy, 0).r;
+    float shadowMapDepth = shadowMaps[shadowMapIdx].SampleLevel(pointSampler, worldLightNDC.xy, 0.f).r;
             
     float bias = 0.000001f * tan(acos(max(dot(worldNormal, worldToLight), 0.f)));
     bias = clamp(bias, 0, 0.00001f);
 
     return shadowMapDepth > worldLightNDC.z - bias;
+}
+
+float getShadowValueCube(uint shadowMapIdx, float3 lightVec, float farPlane)
+{
+    if (shadowMapIdx == INVALID_UINT32)
+    {
+        return 0.f;
+    }
+
+    float shadowMapDepth = shadowMapCubes[shadowMapIdx].SampleLevel(pointSampler, normalize(lightVec), 0.f).r;
+    shadowMapDepth *= farPlane;
+    
+    return shadowMapDepth > length(lightVec);
 }
 
 float4 main(InputData input) : SV_TARGET
@@ -140,20 +159,23 @@ float4 main(InputData input) : SV_TARGET
         
         float3 worldToLight = pointLight.position - input.worldPosition;
 
+        float shadowValue = getShadowValueCube(pointLight.shadowMapIdx, -worldToLight, pointLight.farPlane);
+        
         float distance = length(worldToLight);
         worldToLight /= distance;
+
         
         float dotty = max(dot(worldToLight, worldNormal), 0.f);
         float attentuation = 1.f / (1.f + pointLight.attenuation.x + pointLight.attenuation.y * distance * distance);
         
-        diffuseLight += pointLight.colour * pointLight.intensity * dotty * attentuation;
+        diffuseLight += shadowValue * pointLight.colour * pointLight.intensity * dotty * attentuation;
         
         
         float3 lightReflection = reflect(-worldToLight, worldNormal);
         float specularIntensity = max(dot(lightReflection, worldToCamera), 0.f);
         specularIntensity = pow(specularIntensity, specularExpontent);
         
-        specularLight += pointLight.colour * pointLight.intensity * specularIntensity * attentuation;
+        specularLight += shadowValue * pointLight.colour * pointLight.intensity * specularIntensity * attentuation;
     }
 
     
@@ -161,7 +183,7 @@ float4 main(InputData input) : SV_TARGET
     {
         DirectionalLight dirLight = directionalLights[i];
         
-        float shadowValue = getShadowMapValue(dirLight.shadowMapIdx, dirLight.viewProjMatrix, worldNormal, dirLight.direction, input.worldPosition);
+        float shadowValue = getShadowValue(dirLight.shadowMapIdx, dirLight.viewProjMatrix, worldNormal, dirLight.direction, input.worldPosition);
 
 
         float dotty = max(dot(dirLight.direction, worldNormal), 0.f);
@@ -191,7 +213,7 @@ float4 main(InputData input) : SV_TARGET
             continue; // Change to float value which we multiple by?
         }
 
-        float shadowValue = getShadowMapValue(spotLight.shadowMapIdx, spotLight.viewProjMatrix, worldNormal, worldToLight, input.worldPosition);
+        float shadowValue = getShadowValue(spotLight.shadowMapIdx, spotLight.viewProjMatrix, worldNormal, worldToLight, input.worldPosition);
         
         
         float dotty = max(dot(worldToLight, worldNormal), 0.f);

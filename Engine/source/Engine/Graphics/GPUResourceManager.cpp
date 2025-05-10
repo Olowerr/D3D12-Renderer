@@ -27,7 +27,7 @@ namespace Okay
 		m_pDevice = nullptr;
 	}
 
-	Allocation GPUResourceManager::createTexture(uint32_t width, uint32_t height, uint16_t mipLevels, DXGI_FORMAT format, uint32_t flags, const void* pData)
+	Allocation GPUResourceManager::createTexture(uint32_t width, uint32_t height, uint16_t mipLevels, uint32_t arraySize, DXGI_FORMAT format, uint32_t flags, const void* pData)
 	{
 		OKAY_ASSERT(width);
 		OKAY_ASSERT(height);
@@ -60,7 +60,7 @@ namespace Okay
 		mipLevels = glm::min(mipLevels, (uint16_t)(glm::log2(glm::max(width, height)) + 1));
 
 		Resource& resource = m_resources.emplace_back();
-		resource.pDXResource = m_heapStore.requestResource(D3D12_HEAP_TYPE_DEFAULT, width, height, mipLevels, DXGI_FORMAT(format), pClearValue, isDepth);
+		resource.pDXResource = m_heapStore.requestResource(D3D12_HEAP_TYPE_DEFAULT, width, height, mipLevels, arraySize, DXGI_FORMAT(format), pClearValue, isDepth);
 
 		D3D12_RESOURCE_DESC desc = resource.pDXResource->GetDesc();
 		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &desc);
@@ -95,7 +95,7 @@ namespace Okay
 
 		Resource& resource = m_resources.emplace_back();
 
-		resource.pDXResource = m_heapStore.requestResource(heapType, size, 1, 1, DXGI_FORMAT_UNKNOWN, nullptr, false);
+		resource.pDXResource = m_heapStore.requestResource(heapType, size, 1, 1, 1, DXGI_FORMAT_UNKNOWN, nullptr, false);
 		resource.heapType = heapType;
 
 		resource.nextAppendOffset = 0;

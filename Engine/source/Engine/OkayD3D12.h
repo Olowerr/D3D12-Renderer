@@ -73,6 +73,7 @@ namespace Okay
 		OKAY_TEXTURE_FLAG_RENDER = 1,
 		OKAY_TEXTURE_FLAG_SHADER_READ = 2,
 		OKAY_TEXTURE_FLAG_DEPTH = 4,
+		OKAY_TEXTURE_FLAG_CUBE = 8,
 	};
 
 	inline void logAdapterInfo(IDXGIAdapter* pAdapter)

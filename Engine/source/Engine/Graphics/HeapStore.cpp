@@ -22,7 +22,7 @@ namespace Okay
 		m_pDevice = nullptr;
 	}
 	
-	ID3D12Resource* HeapStore::requestResource(D3D12_HEAP_TYPE heapType, uint64_t width, uint32_t height, uint32_t mips, DXGI_FORMAT format, D3D12_CLEAR_VALUE* pClearValue, bool isDepth)
+	ID3D12Resource* HeapStore::requestResource(D3D12_HEAP_TYPE heapType, uint64_t width, uint32_t height, uint32_t mips, uint32_t arraySize, DXGI_FORMAT format, D3D12_CLEAR_VALUE* pClearValue, bool isDepth)
 	{
 		bool isBuffer = format == DXGI_FORMAT_UNKNOWN;
 
@@ -32,7 +32,7 @@ namespace Okay
 
 		resourceDesc.Width = width;
 		resourceDesc.Height = height;
-		resourceDesc.DepthOrArraySize = 1;
+		resourceDesc.DepthOrArraySize = arraySize;
 		resourceDesc.MipLevels = mips;
 
 		resourceDesc.Format = format;

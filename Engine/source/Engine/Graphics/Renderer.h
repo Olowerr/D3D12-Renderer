@@ -4,6 +4,7 @@
 #include "Engine/Scene/Scene.h"
 #include "RenderPass.h"
 #include "RingBuffer.h"
+#include "Engine/Misc/StaticContainer.h"
 
 namespace Okay
 {
@@ -39,6 +40,16 @@ namespace Okay
 		glm::mat4 viewProjMatrix = glm::mat4(1.f);
 	};
 
+	struct ShadowMapCube
+	{
+		Allocation textureAllocation = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE firstDsvHandle = {};
+		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
+
+		glm::mat4 viewProjMatrices[6] = {};
+		glm::vec3 lightPos = glm::vec3(0.f);
+	};
+
 	class Renderer
 	{
 	public:
@@ -48,6 +59,8 @@ namespace Okay
 		static const uint32_t SHADOW_MAPS_WIDTH = 2048;
 		static const uint32_t SHADOW_MAPS_HEIGHT = 2048;
 		static const uint32_t MAX_SHADOW_MAPS = 32;
+
+		static const uint32_t MAX_POINT_SHADOW_CUBES = 8;
 
 		static const uint32_t DIR_LIGHT_RANGE = 10000;
 		static const uint32_t DIR_LIGHT_SHADOW_WORLD_WIDTH = 4000;
@@ -65,6 +78,11 @@ namespace Okay
 		void preProcessResources(const ResourceManager& resourceManager);
 
 	private:
+		void drawDrawGroups(ID3D12GraphicsCommandList* pCommandList);
+
+
+	private:
+
 		void updateBuffers(const Scene& scene);
 		void preRender(D3D12_CPU_DESCRIPTOR_HANDLE* pOutCurrentBB);
 		void renderScene(const Scene& scene, D3D12_CPU_DESCRIPTOR_HANDLE currentMainRtv);
@@ -80,7 +98,10 @@ namespace Okay
 		void createRenderPasses();
 
 		ShadowMap& createShadowMap(uint32_t width, uint32_t height);
+		ShadowMapCube& createShadowMapCube(uint32_t width, uint32_t height);
+
 		void trySetShadowMapData(glm::mat4 viewProjMatrix, uint32_t* pOutShadowMapIdx);
+		void trySetShadowMapCubeData(glm::mat4* pViewProjMatrices, glm::vec3 lightPos, uint32_t* pOutShadowMapIdx);
 
 		void preProcessMeshes(const std::vector<Mesh>& meshes);
 		void preProcessTextures(const std::vector<Texture>& textures);
@@ -115,7 +136,8 @@ namespace Okay
 		DescriptorHeapStore m_descriptorHeapStore;
 		RingBuffer m_ringBuffer;
 
-		uint32_t m_rtvDescriptorSize = INVALID_UINT32;
+		uint32_t m_rtvIncrementSize = INVALID_UINT32;
+		uint32_t m_dsvIncrementSize = INVALID_UINT32;
 
 	private: // Draw
 		D3D12_GPU_VIRTUAL_ADDRESS m_renderDataGVA = INVALID_UINT64;
@@ -130,9 +152,10 @@ namespace Okay
 
 	private: // Shadows
 		RenderPass m_shadowPass;
+		RenderPass m_shadowPassPointLights;
 
-		uint32_t m_numActiveShadowMaps = INVALID_UINT32;
-		std::vector<ShadowMap> m_shadowMapPool;
+		StaticContainer<ShadowMap, MAX_SHADOW_MAPS> m_shadowMapPool;
+		StaticContainer<ShadowMapCube, MAX_POINT_SHADOW_CUBES> m_shadowMapCubePool;
 
 	private: // Lights
 		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA = INVALID_UINT64;

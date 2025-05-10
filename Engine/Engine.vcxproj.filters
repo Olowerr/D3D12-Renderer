@@ -105,6 +105,9 @@
     <ClInclude Include="deps\include\imgui\imstb_truetype.h">
       <Filter>Imgui</Filter>
     </ClInclude>
+    <ClInclude Include="source\Engine\Misc\StaticContainer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\Engine\Application\Window.cpp">
@@ -169,5 +172,6 @@
     <FxCompile Include="resources\Shaders\VertexShader.hlsl" />
     <FxCompile Include="resources\Shaders\PixelShader.hlsl" />
     <FxCompile Include="resources\Shaders\MipMapGenerationCS.hlsl" />
+    <FxCompile Include="resources\shaders\ShadowPS.hlsl" />
   </ItemGroup>
 </Project>

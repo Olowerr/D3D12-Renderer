@@ -9,6 +9,12 @@ struct InputVertex
     float3 biTangent;
 };
 
+struct OutputVertex
+{
+    float4 svPosition : SV_POSITION;
+    float3 worldPosition : WORLD_POS;
+};
+
 struct ObjectData
 {
     float4x4 objectMatrix;
@@ -36,13 +42,15 @@ StructuredBuffer<ObjectData> objectDatas : register(t1, space0);
 
 // --- Functions
 
-float4 main(uint vertexId : SV_VERTEXID, uint instanceID : SV_INSTANCEID) : SV_POSITION
+OutputVertex main(uint vertexId : SV_VERTEXID, uint instanceID : SV_INSTANCEID)
 {
+    OutputVertex output;
+    
     InputVertex inputVertex = verticies[vertexId];
     float4x4 worldMatrix = objectDatas[instanceID].objectMatrix;
 	
-    float3 worldPosition = mul(float4(inputVertex.position, 1.f), worldMatrix).xyz;
-    float4 svPosition = mul(float4(worldPosition, 1.f), viewProjMatrix);
+    output.worldPosition = mul(float4(inputVertex.position, 1.f), worldMatrix).xyz;
+    output.svPosition = mul(float4(output.worldPosition, 1.f), viewProjMatrix);
 
-    return svPosition;
+    return output;
 }
