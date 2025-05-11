@@ -43,7 +43,7 @@ namespace Okay
 	struct ShadowMapCube
 	{
 		Allocation textureAllocation = {};
-		D3D12_CPU_DESCRIPTOR_HANDLE firstDsvHandle = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
 		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
 
 		glm::mat4 viewProjMatrices[6] = {};

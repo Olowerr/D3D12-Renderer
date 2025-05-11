@@ -30,9 +30,9 @@ namespace Okay
 		void initialize(ID3D12Device* pDevice, const D3D12_GRAPHICS_PIPELINE_STATE_DESC& pipelineDesc, const D3D12_ROOT_SIGNATURE_DESC& rootSignatureDesc);
 		void shutdown();
 
-		void bind(ID3D12GraphicsCommandList* pDirectCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle);
+		void bind(ID3D12GraphicsCommandList* pDirectCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle, uint32_t numViewports);
 		void bindBase(ID3D12GraphicsCommandList* pDirectCommandList);
-		void bindRTVs(ID3D12GraphicsCommandList* pCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle);
+		void bindRTVs(ID3D12GraphicsCommandList* pCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle, uint32_t numViewports);
 
 		void updateProperties(D3D12_VIEWPORT viewport, D3D12_RECT scissorRect, D3D12_PRIMITIVE_TOPOLOGY topology);
 
@@ -47,7 +47,7 @@ namespace Okay
 		ID3D12RootSignature* m_pRootSignature = nullptr;
 		ID3D12PipelineState* m_pPSO = nullptr;
 
-		D3D12_VIEWPORT m_viewport = {};
-		D3D12_RECT m_scissorRect = {};
+		D3D12_VIEWPORT m_viewport[D3D12_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE] = {};
+		D3D12_RECT m_scissorRect[D3D12_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE] = {};
 	};
 }

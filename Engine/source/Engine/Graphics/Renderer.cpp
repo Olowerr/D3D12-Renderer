@@ -28,6 +28,13 @@ namespace Okay
 		uint32_t normalMapIdx = 0;
 	};
 
+	struct GPUShadowMapCubeData
+	{
+		glm::mat4 matrices[6] = {};
+		glm::vec3 lightPos = glm::vec3(0.f);
+		float farPlane = 0.f;
+	};
+
 	struct GPUPointLight
 	{
 		uint32_t shadowMapIdx = INVALID_UINT32;
@@ -255,12 +262,7 @@ namespace Okay
 		}
 		for (uint32_t i = 0; i < m_shadowMapCubePool.m_numActive; i++)
 		{
-			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_shadowMapCubePool[i].firstDsvHandle;
-			for (uint32_t k = 0; k < 6; k++)
-			{
-				pCommandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
-				dsvHandle.ptr += m_dsvIncrementSize;
-			}
+			pCommandList->ClearDepthStencilView(m_shadowMapCubePool[i].dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 		}
 	}
 
@@ -285,7 +287,7 @@ namespace Okay
 			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = m_ringBuffer.getCurrentGPUAddress() + ringBufferWrittenBytes;
 			pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
 
-			m_shadowPass.bindRTVs(pCommandList, 0, nullptr, &shadowMap.dsvHandle);
+			m_shadowPass.bindRTVs(pCommandList, 0, nullptr, &shadowMap.dsvHandle, 1);
 
 			drawDrawGroups(pCommandList);
 
@@ -308,26 +310,21 @@ namespace Okay
 		{
 			const ShadowMapCube& shadowMapCube = m_shadowMapCubePool[i];
 
-			for (uint32_t k = 0; k < 6; k++)
-			{
-				GPURenderData* pRenderData = (GPURenderData*)pMappedRingBuffer;
-				pRenderData->viewProjMatrix = shadowMapCube.viewProjMatrices[k];
-				pRenderData->cameraPos = shadowMapCube.lightPos;
-				pRenderData->farPlane = 3000.f;
+			GPUShadowMapCubeData* pShadowMapData = (GPUShadowMapCubeData*)pMappedRingBuffer;
+			memcpy(pShadowMapData->matrices, shadowMapCube.viewProjMatrices, sizeof(glm::mat4) * 6);
+			pShadowMapData->lightPos = shadowMapCube.lightPos;
+			pShadowMapData->farPlane = 3000.f;
 
-				D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = m_ringBuffer.getCurrentGPUAddress() + ringBufferWrittenBytes;
-				pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
+			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = m_ringBuffer.getCurrentGPUAddress() + ringBufferWrittenBytes;
+			pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
 
-				D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = shadowMapCube.firstDsvHandle;
-				dsvHandle.ptr += (uint64_t)k * m_dsvIncrementSize;
-				m_shadowPass.bindRTVs(pCommandList, 0, nullptr, &dsvHandle);
+			m_shadowPassPointLights.bindRTVs(pCommandList, 0, nullptr, &shadowMapCube.dsvHandle, 6);
 
-				drawDrawGroups(pCommandList);
+			drawDrawGroups(pCommandList);
 
 
-				pMappedRingBuffer += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
-				ringBufferWrittenBytes += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
-			}
+			pMappedRingBuffer += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
+			ringBufferWrittenBytes += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
 
 			s_shadowMapBarriers[i + m_shadowMapPool.getSize()].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
 			s_shadowMapBarriers[i + m_shadowMapPool.getSize()].Transition.pResource = m_gpuResourceManager.getDXResource(m_shadowMapCubePool[i].textureAllocation.resourceHandle);
@@ -342,7 +339,7 @@ namespace Okay
 		m_ringBuffer.unmap(ringBufferWrittenBytes);
 
 
-		m_mainRenderPass.bind(pCommandList, 1, &currentMainRtv, &m_mainDsvCpuHandle);
+		m_mainRenderPass.bind(pCommandList, 1, &currentMainRtv, &m_mainDsvCpuHandle, 1);
 
 		ID3D12DescriptorHeap* pMaterialDXDescHeap = m_descriptorHeapStore.getDXDescriptorHeap(m_materialTexturesDHH);
 		pCommandList->SetDescriptorHeaps(1, &pMaterialDXDescHeap);
@@ -609,13 +606,18 @@ namespace Okay
 		D3D12_RECT shadowScissorRect = createRect(SHADOW_MAPS_WIDTH, SHADOW_MAPS_HEIGHT);
 		m_shadowPass.updateProperties(shadowViewport, shadowScissorRect, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+		nextBlobIdx = 0;
+		for (ID3DBlob*& pBlob : shaderBlobs)
+			D3D12_RELEASE(pBlob);
+
 
 		// Point Light Shadow Pass
 
-		pipelineDesc.PS = compileShader(SHADER_PATH / "ShadowPS.hlsl", "ps_5_1", &shaderBlobs[nextBlobIdx++]);
+		pipelineDesc.VS = compileShader(SHADER_PATH / "ShadowCubeVS.hlsl", "vs_5_1", &shaderBlobs[nextBlobIdx++]);
+		pipelineDesc.GS = compileShader(SHADER_PATH / "ShadowCubeGS.hlsl", "gs_5_1", &shaderBlobs[nextBlobIdx++]);
+		pipelineDesc.PS = compileShader(SHADER_PATH / "ShadowCubePS.hlsl", "ps_5_1", &shaderBlobs[nextBlobIdx++]);
 		m_shadowPassPointLights.initialize(m_pDevice, pipelineDesc, rootSignatureDesc);
 		m_shadowPassPointLights.updateProperties(shadowViewport, shadowScissorRect, D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
 
 		nextBlobIdx = 0;
 		for (ID3DBlob*& pBlob : shaderBlobs)
@@ -684,21 +686,18 @@ namespace Okay
 		shadowMap.srvHandle = m_descriptorHeapStore.allocateDescriptors(m_materialTexturesDHH, MAX_SHADOW_MAPS + m_shadowMapCubePool.getSize() - 1, &shadowMapSRVDesc, 1).gpuHandle;
 
 
-		DescriptorDesc shadowMapDSVDescs[6] = {};
-		for (uint32_t i = 0; i < 6; i++)
-		{
-			shadowMapDSVDescs[i].type = OKAY_DESCRIPTOR_TYPE_DSV;
-			shadowMapDSVDescs[i].pDXResource = pDXTexture;
-			shadowMapDSVDescs[i].nullDesc = false;
-			shadowMapDSVDescs[i].dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
-			shadowMapDSVDescs[i].dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
-			shadowMapDSVDescs[i].dsvDesc.Texture2DArray.MipSlice = 0;
-			shadowMapDSVDescs[i].dsvDesc.Texture2DArray.ArraySize = 1;
-			shadowMapDSVDescs[i].dsvDesc.Texture2DArray.FirstArraySlice = i;
-			shadowMapDSVDescs[i].dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
-		}
+		DescriptorDesc shadowMapDSVDesc = {};
+		shadowMapDSVDesc.type = OKAY_DESCRIPTOR_TYPE_DSV;
+		shadowMapDSVDesc.pDXResource = pDXTexture;
+		shadowMapDSVDesc.nullDesc = false;
+		shadowMapDSVDesc.dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+		shadowMapDSVDesc.dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2DARRAY;
+		shadowMapDSVDesc.dsvDesc.Texture2DArray.MipSlice = 0;
+		shadowMapDSVDesc.dsvDesc.Texture2DArray.ArraySize = 6;
+		shadowMapDSVDesc.dsvDesc.Texture2DArray.FirstArraySlice = 0;
+		shadowMapDSVDesc.dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
 
-		shadowMap.firstDsvHandle = m_descriptorHeapStore.allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, shadowMapDSVDescs, 6).cpuHandle;
+		shadowMap.dsvHandle = m_descriptorHeapStore.allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, &shadowMapDSVDesc, 1).cpuHandle;
 
 		m_commandContext.transitionResource(pDXTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
@@ -846,10 +845,10 @@ namespace Okay
 			for (uint32_t i = 0; i < 6; i++)
 			{
 				glm::vec3 upVector = glm::vec3(0.f, 1.f, 0.f);
-				if (i == 2 || i == 3)
-				{
+				if (i == 2)
+					upVector = glm::vec3(0.f, 0.f, -1.f);
+				else if (i == 3)
 					upVector = glm::vec3(0.f, 0.f, 1.f);
-				}
 
 				viewProjMatrices[i] = glm::transpose(projMatrix * glm::lookAt(transform.position, transform.position + CUBE_MAP_DIRECTIONS[i], upVector));
 			}

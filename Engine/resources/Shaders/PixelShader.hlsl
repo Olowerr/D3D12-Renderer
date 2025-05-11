@@ -122,17 +122,17 @@ float getShadowValue(uint shadowMapIdx, float4x4 lightViewProjMatrix, float3 wor
     return shadowMapDepth > worldLightNDC.z - bias;
 }
 
-float getShadowValueCube(uint shadowMapIdx, float3 lightVec, float farPlane)
+float getShadowValueCube(uint shadowMapIdx, float3 lightVec, float distToLight, float farPlane)
 {
     if (shadowMapIdx == INVALID_UINT32)
     {
         return 0.f;
     }
 
-    float shadowMapDepth = shadowMapCubes[shadowMapIdx].SampleLevel(pointSampler, normalize(lightVec), 0.f).r;
+    float shadowMapDepth = shadowMapCubes[shadowMapIdx].SampleLevel(pointSampler, lightVec, 0.f).r;
     shadowMapDepth *= farPlane;
     
-    return shadowMapDepth > length(lightVec);
+    return shadowMapDepth > distToLight;
 }
 
 float4 main(InputData input) : SV_TARGET
@@ -158,12 +158,11 @@ float4 main(InputData input) : SV_TARGET
         PointLight pointLight = pointLights[i];
         
         float3 worldToLight = pointLight.position - input.worldPosition;
-
-        float shadowValue = getShadowValueCube(pointLight.shadowMapIdx, -worldToLight, pointLight.farPlane);
-        
         float distance = length(worldToLight);
         worldToLight /= distance;
-
+        
+        float shadowValue = getShadowValueCube(pointLight.shadowMapIdx, -worldToLight, distance, pointLight.farPlane);
+        
         
         float dotty = max(dot(worldToLight, worldNormal), 0.f);
         float attentuation = 1.f / (1.f + pointLight.attenuation.x + pointLight.attenuation.y * distance * distance);

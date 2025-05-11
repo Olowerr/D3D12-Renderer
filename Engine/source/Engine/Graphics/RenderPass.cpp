@@ -21,16 +21,19 @@ namespace Okay
 		D3D12_RELEASE(m_pPSO);
 	}
 
-	void RenderPass::bind(ID3D12GraphicsCommandList* pDirectCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle)
+	void RenderPass::bind(ID3D12GraphicsCommandList* pDirectCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle, uint32_t numViewports)
 	{
 		bindBase(pDirectCommandList);
-		bindRTVs(pDirectCommandList, numRTVs, pRtvHandles, pDsvHandle);
+		bindRTVs(pDirectCommandList, numRTVs, pRtvHandles, pDsvHandle, numViewports);
 	}
 
 	void RenderPass::updateProperties(D3D12_VIEWPORT viewport, D3D12_RECT scissorRect, D3D12_PRIMITIVE_TOPOLOGY topology)
 	{
-		m_viewport = viewport;
-		m_scissorRect = scissorRect;
+		for (uint32_t i = 0; i < D3D12_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE; i++)
+		{
+			m_viewport[i] = viewport;
+			m_scissorRect[i] = scissorRect;
+		}
 		
 		//recordBundle(topology);
 	}
@@ -44,13 +47,13 @@ namespace Okay
 		pDirectCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	}
 
-	void RenderPass::bindRTVs(ID3D12GraphicsCommandList* pCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle)
+	void RenderPass::bindRTVs(ID3D12GraphicsCommandList* pCommandList, uint32_t numRTVs, const D3D12_CPU_DESCRIPTOR_HANDLE* pRtvHandles, const D3D12_CPU_DESCRIPTOR_HANDLE* pDsvHandle, uint32_t numViewports)
 	{
 		// Not supported in bundles
 		// https://learn.microsoft.com/en-us/windows/win32/direct3d12/recording-command-lists-and-bundles#command-list-api-restrictions
 		pCommandList->OMSetRenderTargets(numRTVs, pRtvHandles, false, pDsvHandle);
-		pCommandList->RSSetViewports(1, &m_viewport);
-		pCommandList->RSSetScissorRects(1, &m_scissorRect);
+		pCommandList->RSSetViewports(numViewports, m_viewport);
+		pCommandList->RSSetScissorRects(numViewports, m_scissorRect);
 	}
 
 	void RenderPass::recordBundle(D3D12_PRIMITIVE_TOPOLOGY topology)

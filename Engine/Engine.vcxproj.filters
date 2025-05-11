@@ -172,6 +172,8 @@
     <FxCompile Include="resources\Shaders\VertexShader.hlsl" />
     <FxCompile Include="resources\Shaders\PixelShader.hlsl" />
     <FxCompile Include="resources\Shaders\MipMapGenerationCS.hlsl" />
-    <FxCompile Include="resources\shaders\ShadowPS.hlsl" />
+    <FxCompile Include="resources\shaders\ShadowCubePS.hlsl" />
+    <FxCompile Include="resources\shaders\ShadowCubeGS.hlsl" />
+    <FxCompile Include="resources\shaders\ShadowCubeVS.hlsl" />
   </ItemGroup>
 </Project>
