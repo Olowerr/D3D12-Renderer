@@ -32,6 +32,7 @@
     <ClInclude Include="source\Engine\Application\KeyCodes.h" />
     <ClInclude Include="source\Engine\Application\Time.h" />
     <ClInclude Include="source\Engine\Graphics\DescriptorHeapStore.h" />
+    <ClInclude Include="source\Engine\Graphics\Handlers\LightHandler.h" />
     <ClInclude Include="source\Engine\Graphics\HeapStore.h" />
     <ClInclude Include="source\Engine\Graphics\CommandContext.h" />
     <ClInclude Include="source\Engine\Graphics\GPUResourceManager.h" />
@@ -61,6 +62,7 @@
     <ClCompile Include="source\Engine\Application\ImguiHelper.cpp" />
     <ClCompile Include="source\Engine\Application\Input.cpp" />
     <ClCompile Include="source\Engine\Graphics\DescriptorHeapStore.cpp" />
+    <ClCompile Include="source\Engine\Graphics\Handlers\LightHandler.cpp" />
     <ClCompile Include="source\Engine\Graphics\HeapStore.cpp" />
     <ClCompile Include="source\Engine\Graphics\CommandContext.cpp" />
     <ClCompile Include="source\Engine\Graphics\GPUResourceManager.cpp" />

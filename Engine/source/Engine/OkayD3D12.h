@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Okay.h"
+#include "entt/entt.hpp"
 
 #include <d3d12.h>
 #include <dxgi1_2.h>
@@ -29,17 +30,75 @@
 
 namespace Okay
 {
+	typedef uint16_t ResourceHandle;
+	constexpr ResourceHandle INVALID_RH = INVALID_UINT16;
+
 	inline const FilePath SHADER_PATH = FilePath("..") / "Engine" / "resources" / "shaders";
 
-	constexpr uint64_t alignAddress64(uint64_t adress, uint32_t alignment)
+	enum TextureFlags : uint32_t
 	{
-		return ((adress - 1) - ((adress - 1) % alignment)) + alignment;
-	}
+		OKAY_TEXTURE_FLAG_NONE = 0,
+		OKAY_TEXTURE_FLAG_RENDER = 1,
+		OKAY_TEXTURE_FLAG_SHADER_READ = 2,
+		OKAY_TEXTURE_FLAG_DEPTH = 4,
+		OKAY_TEXTURE_FLAG_CUBE = 8,
+	};
 
-	constexpr uint32_t alignAddress32(uint32_t address, uint32_t alignment)
+	struct Allocation
 	{
-		return (uint32_t)alignAddress64((uint64_t)address, alignment);
-	}
+		ResourceHandle resourceHandle = INVALID_RH;
+		uint64_t resourceOffset = INVALID_UINT64;
+
+		uint64_t elementSize = INVALID_UINT64;
+		uint32_t numElements = INVALID_UINT32;
+	};
+
+	struct Resource
+	{
+		ID3D12Resource* pDXResource = nullptr;
+		D3D12_HEAP_TYPE heapType = D3D12_HEAP_TYPE(-1);
+
+		uint64_t maxSize = INVALID_UINT64;
+		uint64_t nextAppendOffset = INVALID_UINT64;
+	};
+
+	struct DXMesh
+	{
+		DXMesh() = default;
+
+		D3D12_GPU_VIRTUAL_ADDRESS gpuVerticiesGVA = {};
+		D3D12_INDEX_BUFFER_VIEW indiciesView = {};
+		uint32_t numIndicies = INVALID_UINT32;
+	};
+
+	struct DrawGroup
+	{
+		DrawGroup() = default;
+
+		uint32_t dxMeshId = INVALID_UINT32;
+		std::vector<entt::entity> entities;
+
+		D3D12_GPU_VIRTUAL_ADDRESS objectDatasVA = INVALID_UINT64;
+	};
+
+	struct ShadowMap
+	{
+		Allocation textureAllocation = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
+		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
+
+		glm::mat4 viewProjMatrix = glm::mat4(1.f);
+	};
+
+	struct ShadowMapCube
+	{
+		Allocation textureAllocation = {};
+		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
+		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
+
+		glm::mat4 viewProjMatrices[6] = {};
+		glm::vec3 lightPos = glm::vec3(0.f);
+	};
 
 	enum DescriptorType : uint32_t
 	{
@@ -67,14 +126,15 @@ namespace Okay
 		ID3D12Resource* pDXResource = nullptr; // Some views need the resource for creation
 	};
 
-	enum TextureFlags : uint32_t
+	constexpr uint64_t alignAddress64(uint64_t adress, uint32_t alignment)
 	{
-		OKAY_TEXTURE_FLAG_NONE = 0,
-		OKAY_TEXTURE_FLAG_RENDER = 1,
-		OKAY_TEXTURE_FLAG_SHADER_READ = 2,
-		OKAY_TEXTURE_FLAG_DEPTH = 4,
-		OKAY_TEXTURE_FLAG_CUBE = 8,
-	};
+		return ((adress - 1) - ((adress - 1) % alignment)) + alignment;
+	}
+
+	constexpr uint32_t alignAddress32(uint32_t address, uint32_t alignment)
+	{
+		return (uint32_t)alignAddress64((uint64_t)address, alignment);
+	}
 
 	inline void logAdapterInfo(IDXGIAdapter* pAdapter)
 	{

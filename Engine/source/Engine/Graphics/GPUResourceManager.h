@@ -12,27 +12,6 @@
 
 namespace Okay
 {
-	typedef uint16_t ResourceHandle;
-	constexpr ResourceHandle INVALID_RH = INVALID_UINT16;
-
-	struct Allocation
-	{
-		ResourceHandle resourceHandle = INVALID_RH;
-		uint64_t resourceOffset = INVALID_UINT64;
-
-		uint64_t elementSize = INVALID_UINT64;
-		uint32_t numElements = INVALID_UINT32;
-	};
-
-	struct Resource
-	{
-		ID3D12Resource* pDXResource = nullptr;
-		D3D12_HEAP_TYPE heapType = D3D12_HEAP_TYPE(-1);
-
-		uint64_t maxSize = INVALID_UINT64;
-		uint64_t nextAppendOffset = INVALID_UINT64;
-	};
-
 	class GPUResourceManager
 	{
 		/*

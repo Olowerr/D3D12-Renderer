@@ -5,6 +5,7 @@
 #include "RenderPass.h"
 #include "RingBuffer.h"
 #include "Engine/Misc/StaticContainer.h"
+#include "Handlers/LightHandler.h"
 
 namespace Okay
 {
@@ -12,59 +13,11 @@ namespace Okay
 	class Mesh;
 	class Texture;
 
-	struct DXMesh
-	{
-		DXMesh() = default;
-
-		D3D12_GPU_VIRTUAL_ADDRESS gpuVerticiesGVA = {};
-		D3D12_INDEX_BUFFER_VIEW indiciesView = {};
-		uint32_t numIndicies = INVALID_UINT32;
-	};
-
-	struct DrawGroup
-	{
-		DrawGroup() = default;
-
-		uint32_t dxMeshId = INVALID_UINT32;
-		std::vector<entt::entity> entities;
-
-		D3D12_GPU_VIRTUAL_ADDRESS objectDatasVA = INVALID_UINT64;
-	};
-
-	struct ShadowMap
-	{
-		Allocation textureAllocation = {};
-		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
-		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
-
-		glm::mat4 viewProjMatrix = glm::mat4(1.f);
-	};
-
-	struct ShadowMapCube
-	{
-		Allocation textureAllocation = {};
-		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
-		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
-
-		glm::mat4 viewProjMatrices[6] = {};
-		glm::vec3 lightPos = glm::vec3(0.f);
-	};
-
 	class Renderer
 	{
 	public:
 		static const uint8_t NUM_BACKBUFFERS = 2;
 		static const uint8_t MAX_MIP_LEVELS = 16;
-
-		static const uint32_t SHADOW_MAPS_WIDTH = 2048;
-		static const uint32_t SHADOW_MAPS_HEIGHT = 2048;
-		static const uint32_t MAX_SHADOW_MAPS = 32;
-
-		static const uint32_t MAX_POINT_SHADOW_CUBES = 8;
-
-		static const uint32_t DIR_LIGHT_RANGE = 10000;
-		static const uint32_t DIR_LIGHT_SHADOW_WORLD_WIDTH = 4000;
-		static const uint32_t DIR_LIGHT_SHADOW_WORLD_HEIGHT = 4000;
 
 	public:
 		Renderer() = default;
@@ -79,7 +32,6 @@ namespace Okay
 
 	private:
 		void drawDrawGroups(ID3D12GraphicsCommandList* pCommandList);
-
 
 	private:
 
@@ -97,23 +49,8 @@ namespace Okay
 
 		void createRenderPasses();
 
-		ShadowMap& createShadowMap(uint32_t width, uint32_t height);
-		ShadowMapCube& createShadowMapCube(uint32_t width, uint32_t height);
-
-		void trySetShadowMapData(glm::mat4 viewProjMatrix, uint32_t* pOutShadowMapIdx);
-		void trySetShadowMapCubeData(glm::mat4* pViewProjMatrices, glm::vec3 lightPos, uint32_t* pOutShadowMapIdx);
-
 		void preProcessMeshes(const std::vector<Mesh>& meshes);
 		void preProcessTextures(const std::vector<Texture>& textures);
-
-		template<typename ComponentView> // Template because the ENTT view types are cray cray
-		uint64_t writePointLightData(ComponentView& view, uint8_t* pWriteLocation);
-		
-		template<typename ComponentView> // Template because the ENTT view types are cray cray
-		uint64_t writeSpotLightData(ComponentView& view, uint8_t* pWriteLocation);
-		
-		template<typename ComponentView> // Template because the ENTT view types are cray cray
-		uint64_t writeDirLightData(ComponentView& view, uint8_t* pWriteLocation, const Transform& camTransform);
 
 		void enableDebugLayer();
 		void enableGPUBasedValidation();
@@ -136,6 +73,8 @@ namespace Okay
 		DescriptorHeapStore m_descriptorHeapStore;
 		RingBuffer m_ringBuffer;
 
+		LightHandler m_lightHandler;
+
 		uint32_t m_rtvIncrementSize = INVALID_UINT32;
 		uint32_t m_dsvIncrementSize = INVALID_UINT32;
 
@@ -150,14 +89,6 @@ namespace Okay
 		uint32_t m_activeDrawGroups = INVALID_UINT32;
 		std::vector<DrawGroup> m_drawGroups;
 
-	private: // Shadows
-		RenderPass m_shadowPass;
-		RenderPass m_shadowPassPointLights;
-
-		StaticContainer<ShadowMap, MAX_SHADOW_MAPS> m_shadowMapPool;
-		StaticContainer<ShadowMapCube, MAX_POINT_SHADOW_CUBES> m_shadowMapCubePool;
-
-	private: // Lights
 		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA = INVALID_UINT64;
 		D3D12_GPU_VIRTUAL_ADDRESS m_directionalLightsGVA = INVALID_UINT64;
 		D3D12_GPU_VIRTUAL_ADDRESS m_spotLightsGVA = INVALID_UINT64;

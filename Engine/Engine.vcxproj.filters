@@ -108,6 +108,9 @@
     <ClInclude Include="source\Engine\Misc\StaticContainer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="source\Engine\Graphics\Handlers\LightHandler.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="source\Engine\Application\Window.cpp">
@@ -166,6 +169,9 @@
     </ClCompile>
     <ClCompile Include="deps\include\imgui\imgui_widgets.cpp">
       <Filter>Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="source\Engine\Graphics\Handlers\LightHandler.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
