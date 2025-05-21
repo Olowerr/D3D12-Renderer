@@ -39,12 +39,13 @@ namespace Okay
 
 	private:
 		void preDepthMapRender();
+		void drawDepthMap_Internal(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, uint8_t* pMappedRingBuffer, const ShadowMap& shadowMap, uint32_t shadowBarrierIdx);
 
-		void trySetShadowMapData(glm::mat4 viewProjMatrix, uint32_t* pOutShadowMapIdx);
-		void trySetShadowMapCubeData(glm::mat4* pViewProjMatrices, glm::vec3 lightPos, uint32_t* pOutShadowMapIdx);
+		template<uint32_t containerSize>
+		void trySetShadowMapData(StaticContainer<ShadowMap, containerSize>& container, bool isCubeMap, glm::mat4* pViewProjMatrices, glm::vec3 lightPos, uint32_t* pOutShadowMapIdx);
 
-		ShadowMap& createShadowMap(uint32_t width, uint32_t height);
-		ShadowMapCube& createShadowMapCube(uint32_t width, uint32_t height);
+		template<uint32_t containerSize>
+		ShadowMap& createShadowMap(StaticContainer<ShadowMap, containerSize>& container, bool isCubeMap, uint32_t width, uint32_t height);
 
 		void createRenderPasses();
 
@@ -65,7 +66,7 @@ namespace Okay
 		RenderPass m_shadowPassPointLights;
 
 		StaticContainer<ShadowMap, MAX_SHADOW_MAPS> m_shadowMapPool;
-		StaticContainer<ShadowMapCube, MAX_POINT_SHADOW_CUBES> m_shadowMapCubePool;
+		StaticContainer<ShadowMap, MAX_POINT_SHADOW_CUBES> m_shadowMapCubePool;
 
 	};
 }

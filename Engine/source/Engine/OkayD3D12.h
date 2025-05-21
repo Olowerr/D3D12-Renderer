@@ -87,15 +87,6 @@ namespace Okay
 		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
 		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
 
-		glm::mat4 viewProjMatrix = glm::mat4(1.f);
-	};
-
-	struct ShadowMapCube
-	{
-		Allocation textureAllocation = {};
-		D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = {};
-		D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = {};
-
 		glm::mat4 viewProjMatrices[6] = {};
 		glm::vec3 lightPos = glm::vec3(0.f);
 	};
