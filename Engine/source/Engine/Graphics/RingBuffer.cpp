@@ -16,21 +16,37 @@ namespace Okay
 	{
 		D3D12_RELEASE(m_pRingBuffer);
 	}
-	
-	D3D12_GPU_VIRTUAL_ADDRESS RingBuffer::allocate(const void* pData, uint64_t byteWidth)
+
+	D3D12_GPU_VIRTUAL_ADDRESS RingBuffer::allocateMapped(const void* pData, uint64_t byteWidth)
 	{
+		OKAY_ASSERT(m_bufferOffset + byteWidth <= m_maxSize);
+
 		D3D12_GPU_VIRTUAL_ADDRESS allocationGpuAddress = getCurrentGPUAddress();
 
-		uint8_t* pMappedData = map();
-		memcpy(pMappedData, pData, byteWidth);
-		unmap(byteWidth);
+		memcpy(getMappedPtr(), pData, byteWidth);
+		m_bufferOffset += alignAddress64(byteWidth, BUFFER_DATA_ALIGNMENT);
 
 		return allocationGpuAddress;
+	}
+
+	uint8_t* RingBuffer::getMappedPtr()
+	{
+		return m_pMappedPtr + m_bufferOffset;
+	}
+
+	void RingBuffer::offsetMappedPtr(uint64_t offset)
+	{
+		m_bufferOffset += offset;
 	}
 
 	uint64_t RingBuffer::getOffset() const
 	{
 		return m_bufferOffset;
+	}
+
+	void RingBuffer::alignOffset(uint32_t alignment)
+	{
+		m_bufferOffset = alignAddress64(m_bufferOffset, alignment);
 	}
 
 	D3D12_GPU_VIRTUAL_ADDRESS RingBuffer::getCurrentGPUAddress() const
@@ -45,22 +61,21 @@ namespace Okay
 	
 	uint8_t* RingBuffer::map()
 	{
+		OKAY_ASSERT(!m_pMappedPtr);
+
 		D3D12_RANGE mapRange = { 0, 0 };
-		uint8_t* pMappedData = nullptr;
-		DX_CHECK(m_pRingBuffer->Map(0, &mapRange, (void**)&pMappedData));
+		DX_CHECK(m_pRingBuffer->Map(0, &mapRange, (void**)&m_pMappedPtr));
 
-		pMappedData += m_bufferOffset;
-
-		return pMappedData;
+		return m_pMappedPtr;
 	}
 
-	void RingBuffer::unmap(uint64_t bytesWritten)
+	void RingBuffer::unmap()
 	{
-		D3D12_RANGE dbgWriteRange = { m_bufferOffset, alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT) };
-		m_pRingBuffer->Unmap(0, &dbgWriteRange);
+		D3D12_RANGE writeRange = { 0, 0 };
+		m_pRingBuffer->Unmap(0, &writeRange);
 
-		m_bufferOffset += alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
-		OKAY_ASSERT(m_bufferOffset <= m_maxSize);
+		m_pMappedPtr = nullptr;
+		m_bufferOffset = 0;
 	}
 
 	void RingBuffer::jumpToStart()

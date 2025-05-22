@@ -49,12 +49,11 @@ namespace Okay
 		float spreadCosAngle = 90.f;
 	};
 
-	void LightHandler::initiate(ID3D12Device* pDevice, GPUResourceManager& gpuResourceManager, CommandContext& commandContext, RingBuffer& ringBuffer, const std::vector<DXMesh>& dxMeshes)
+	void LightHandler::initiate(ID3D12Device* pDevice, GPUResourceManager& gpuResourceManager, CommandContext& commandContext, const std::vector<DXMesh>& dxMeshes)
 	{
 		m_pDevice = pDevice;
 		m_pGpuResourceManager = &gpuResourceManager;
 		m_pCommandContext = &commandContext;
-		m_pRingBuffer = &ringBuffer;
 		m_pDxMeshes = &dxMeshes;
 
 		createRenderPasses();
@@ -73,8 +72,10 @@ namespace Okay
 		m_shadowDescriptorsOffset = offset;
 	}
 	
-	uint64_t LightHandler::writePointLightGPUData(const Scene& scene, uint8_t* pWriteLocation, uint32_t* pOutNumPointLights)
+	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writePointLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumPointLights)
 	{
+		D3D12_GPU_VIRTUAL_ADDRESS gpuPointLightsGVA = ringBuffer.getCurrentGPUAddress();
+
 		static const glm::vec3 CUBE_MAP_DIRECTIONS[6] =
 		{
 			glm::vec3(-1.f, 0.f, 0.f),
@@ -88,12 +89,12 @@ namespace Okay
 		};
 
 		auto pointLightView = scene.getRegistry().view<PointLight, Transform>();
+		*pOutNumPointLights = (uint32_t)pointLightView.size_hint();
 
-		uint64_t bytesWritten = 0;
 		for (entt::entity entity : pointLightView)
 		{
-			GPUPointLight* pGpuPointLight = (GPUPointLight*)(pWriteLocation + bytesWritten);
-			bytesWritten += sizeof(GPUPointLight);
+			GPUPointLight* pGpuPointLight = (GPUPointLight*)ringBuffer.getMappedPtr();
+			ringBuffer.offsetMappedPtr(sizeof(GPUPointLight));
 
 			auto [pointLight, transform] = pointLightView[entity];
 
@@ -132,19 +133,23 @@ namespace Okay
 			trySetShadowMapData(m_shadowMapCubePool, true, viewProjMatrices, transform.position, &pGpuPointLight->shadowMapIdx);
 		}
 
-		return alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
+		ringBuffer.alignOffset();
+		return gpuPointLightsGVA;
 	}
 	
-	uint64_t LightHandler::writeDirLightGPUData(const Scene& scene, uint8_t* pWriteLocation, uint32_t* pOutNumDirLights)
+	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writeDirLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumDirLights)
 	{
+		D3D12_GPU_VIRTUAL_ADDRESS gpuDirLightsGVA = ringBuffer.getCurrentGPUAddress();
+
 		auto dirLightView = scene.getRegistry().view<DirectionalLight, Transform>();
+		*pOutNumDirLights = (uint32_t)dirLightView.size_hint();
+
 		const Transform& camTransform = scene.getActiveCamera().getComponent<Transform>();
 
-		uint64_t bytesWritten = 0;
 		for (entt::entity entity : dirLightView)
 		{
-			GPUDirectionalLight* pGpuDirLight = (GPUDirectionalLight*)(pWriteLocation + bytesWritten);
-			bytesWritten += sizeof(GPUDirectionalLight);
+			GPUDirectionalLight* pGpuDirLight = (GPUDirectionalLight*)ringBuffer.getMappedPtr();
+			ringBuffer.offsetMappedPtr(sizeof(GPUDirectionalLight));
 
 			auto [directionalLight, transform] = dirLightView[entity];
 
@@ -190,19 +195,22 @@ namespace Okay
 				https://www.reddit.com/r/gamedev/comments/xj47t/does_glm_support_frustum_plane_extraction/
 			*/
 		}
-
-		return alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
+		
+		ringBuffer.alignOffset();
+		return gpuDirLightsGVA;
 	}
 	
-	uint64_t LightHandler::writeSpotLightGPUData(const Scene& scene, uint8_t* pWriteLocation, uint32_t* pOutNumSpotLights)
+	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writeSpotLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumSpotLights)
 	{
-		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
+		D3D12_GPU_VIRTUAL_ADDRESS gpuSpotLightsGVA = ringBuffer.getCurrentGPUAddress();
 
-		uint64_t bytesWritten = 0;
+		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
+		*pOutNumSpotLights = (uint32_t)spotLightView.size_hint();
+
 		for (entt::entity entity : spotLightView)
 		{
-			GPUSpotLight* pGpuSpotLight = (GPUSpotLight*)(pWriteLocation + bytesWritten);
-			bytesWritten += sizeof(GPUSpotLight);
+			GPUSpotLight* pGpuSpotLight = (GPUSpotLight*)ringBuffer.getMappedPtr();
+			ringBuffer.offsetMappedPtr(sizeof(GPUSpotLight));
 
 			auto [spotLight, transform] = spotLightView[entity];
 
@@ -222,7 +230,8 @@ namespace Okay
 			trySetShadowMapData(m_shadowMapPool, false, &pGpuSpotLight->viewProjMatrix, glm::vec3(0.f), &pGpuSpotLight->shadowMapIdx);
 		}
 
-		return alignAddress64(bytesWritten, BUFFER_DATA_ALIGNMENT);
+		ringBuffer.alignOffset();
+		return gpuSpotLightsGVA;
 	}
 	
 	void LightHandler::preDepthMapRender()
@@ -261,7 +270,7 @@ namespace Okay
 		}
 	}
 
-	void LightHandler::drawDepthMap_Internal(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, uint8_t* pMappedRingBuffer, const ShadowMap& shadowMap, uint32_t shadowBarrierIdx)
+	void LightHandler::drawDepthMap_Internal(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, const ShadowMap& shadowMap, uint32_t shadowBarrierIdx)
 	{
 		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
 
@@ -287,30 +296,22 @@ namespace Okay
 		s_shadowMapBarriers[shadowBarrierIdx].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 	}
 
-	void LightHandler::drawDepthMaps(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups)
+	void LightHandler::drawDepthMaps(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, RingBuffer& ringBuffer)
 	{
 		preDepthMapRender();
 
-		uint8_t* pMappedRingBuffer = m_pRingBuffer->map();
-		uint64_t ringBufferOffset = 0;
-
 		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
-
 		m_shadowPass.bindBase(pCommandList);
 
 		for (uint32_t i = 0; i < m_shadowMapPool.m_numActive; i++)
 		{
 			const ShadowMap& shadowMap = m_shadowMapPool[i];
 
-			memcpy(pMappedRingBuffer + ringBufferOffset, shadowMap.viewProjMatrices, sizeof(glm::mat4));
-
-			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = m_pRingBuffer->getCurrentGPUAddress() + ringBufferOffset;
+			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = ringBuffer.allocateMapped(shadowMap.viewProjMatrices, sizeof(glm::mat4));
 			pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
 
 			m_shadowPass.bindRTVs(pCommandList, 0, nullptr, &shadowMap.dsvHandle, 1);
-			drawDepthMap_Internal(drawGroups, numActiveDrawGroups, pMappedRingBuffer + ringBufferOffset, shadowMap, i);
-			
-			ringBufferOffset += alignAddress64(sizeof(glm::mat4), BUFFER_DATA_ALIGNMENT);
+			drawDepthMap_Internal(drawGroups, numActiveDrawGroups, shadowMap, i);
 		}
 
 
@@ -320,22 +321,20 @@ namespace Okay
 		{
 			const ShadowMap& shadowMapCube = m_shadowMapCubePool[i];
 
-			GPUShadowMapCubeData* pShadowMapData = (GPUShadowMapCubeData*)(pMappedRingBuffer + ringBufferOffset);
+			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = ringBuffer.getCurrentGPUAddress();
+
+			GPUShadowMapCubeData* pShadowMapData = (GPUShadowMapCubeData*)ringBuffer.getMappedPtr();
 			memcpy(pShadowMapData->matrices, shadowMapCube.viewProjMatrices, sizeof(glm::mat4) * 6);
 			pShadowMapData->lightPos = shadowMapCube.lightPos;
 			pShadowMapData->farPlane = 3000.f;
 
-			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = m_pRingBuffer->getCurrentGPUAddress() + ringBufferOffset;
 			pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
 
 			m_shadowPassPointLights.bindRTVs(pCommandList, 0, nullptr, &shadowMapCube.dsvHandle, 6);
-			drawDepthMap_Internal(drawGroups, numActiveDrawGroups, pMappedRingBuffer + ringBufferOffset, shadowMapCube, i + m_shadowMapPool.m_numActive);
-
-			ringBufferOffset += alignAddress64(sizeof(GPUShadowMapCubeData), BUFFER_DATA_ALIGNMENT);
+			drawDepthMap_Internal(drawGroups, numActiveDrawGroups, shadowMapCube, i + m_shadowMapPool.m_numActive);
 		}
 
 		pCommandList->ResourceBarrier(m_shadowMapPool.m_numActive + m_shadowMapCubePool.m_numActive, s_shadowMapBarriers);
-		m_pRingBuffer->unmap(ringBufferOffset);
 	}
 
 	void LightHandler::newFrame()

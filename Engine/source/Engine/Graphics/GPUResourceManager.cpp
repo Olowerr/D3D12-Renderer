@@ -311,19 +311,16 @@ namespace Okay
 		DX_CHECK(m_pDevice->CreateCommittedResource(&intermediateHeapProperties, D3D12_HEAP_FLAG_NONE, &intermediateTextureDesc, D3D12_RESOURCE_STATE_COPY_SOURCE, nullptr, IID_PPV_ARGS(&pDXIntermediateTexture)));
 
 
-		ID3D12RootSignature* pMipMapRootSignature = createMipMapRootSignature();
-		ID3D12PipelineState* pMipMapPSO = createMipMapPSO(pMipMapRootSignature);
-
 		CommandContext computeContext;
 		computeContext.initialize(m_pDevice, D3D12_COMMAND_LIST_TYPE_COMPUTE);
 		ID3D12GraphicsCommandList* pGraphicsComputeList = computeContext.getCommandList();
 
+
+		ID3D12RootSignature* pMipMapRootSignature = createMipMapRootSignature();
+		ID3D12PipelineState* pMipMapPSO = createMipMapPSO(pMipMapRootSignature);
+
 		pGraphicsComputeList->SetComputeRootSignature(pMipMapRootSignature);
 		pGraphicsComputeList->SetPipelineState(pMipMapPSO);
-
-
-		D3D12_GPU_VIRTUAL_ADDRESS cbAddress = m_pRingBuffer->getCurrentGPUAddress();
-		uint8_t* pMappedMipData = m_pRingBuffer->map();
 
 
 		DescriptorHeapHandle descHeapHandle = m_pDescriptorHeapStore->createDescriptorHeap(totalMipMaps, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
@@ -374,7 +371,7 @@ namespace Okay
 
 
 				float uavIdxAndSrvMip = (float)i - 1;
-				memcpy(pMappedMipData, &uavIdxAndSrvMip, sizeof(float));
+				D3D12_GPU_VIRTUAL_ADDRESS cbAddress = m_pRingBuffer->allocateMapped(&uavIdxAndSrvMip, sizeof(float));
 				pGraphicsComputeList->SetComputeRootConstantBufferView(1, cbAddress);
 
 
@@ -383,9 +380,6 @@ namespace Okay
 				pGraphicsComputeList->Dispatch(mipWidth / 16 + 1, mipHeight / 16 + 1, 1);
 
 				computeContext.transitionSubresource(pDXIntermediateTexture, i, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-
-				pMappedMipData += alignAddress64(sizeof(float), BUFFER_DATA_ALIGNMENT);
-				cbAddress += alignAddress64(sizeof(float), BUFFER_DATA_ALIGNMENT);
 			}
 
 			computeContext.transitionResource(pDXIntermediateTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COPY_SOURCE);
@@ -396,8 +390,6 @@ namespace Okay
 			m_pCommandContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
 		}
-
-		m_pRingBuffer->unmap(BUFFER_DATA_ALIGNMENT * totalMipMaps);
 
 		computeContext.flush();
 		computeContext.shutdown();
@@ -411,7 +403,7 @@ namespace Okay
 	{
 		uint64_t ringBufferOffset = m_pRingBuffer->getOffset();
 
-		m_pRingBuffer->allocate(pData, byteSize);
+		m_pRingBuffer->allocateMapped(pData, byteSize);
 
 		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
 		pCommandList->CopyBufferRegion(pDXResource, resourceOffset, m_pRingBuffer->getDXResource(), ringBufferOffset, byteSize);
@@ -451,7 +443,7 @@ namespace Okay
 			memcpy(pMappedData + i * footPrint.Footprint.RowPitch, pData + i * rowSizeInBytes, rowSizeInBytes);
 		}
 
-		textureUploadBuffer.unmap((uint64_t)textureDesc.Height * footPrint.Footprint.RowPitch);
+		textureUploadBuffer.unmap();
 
 
 		D3D12_TEXTURE_COPY_LOCATION copyDst{};

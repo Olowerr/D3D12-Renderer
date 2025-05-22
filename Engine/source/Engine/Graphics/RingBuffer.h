@@ -13,13 +13,18 @@ namespace Okay
 		void initialize(ID3D12Device* pDevice, uint64_t size);
 		void shutdown();
 
-		D3D12_GPU_VIRTUAL_ADDRESS allocate(const void* pData, uint64_t byteWidth);
+		D3D12_GPU_VIRTUAL_ADDRESS allocateMapped(const void* pData, uint64_t byteWidth);
+
+		uint8_t* getMappedPtr();
+		D3D12_GPU_VIRTUAL_ADDRESS getCurrentGPUAddress() const;
 
 		uint8_t* map();
-		void unmap(uint64_t bytesWritten);
+		void unmap();
 
-		D3D12_GPU_VIRTUAL_ADDRESS getCurrentGPUAddress() const;
+		void offsetMappedPtr(uint64_t offset);
 		uint64_t getOffset() const;
+
+		void alignOffset(uint32_t alignment = BUFFER_DATA_ALIGNMENT);
 
 		ID3D12Resource* getDXResource() const;
 		void jumpToStart();
@@ -29,6 +34,7 @@ namespace Okay
 
 	private:
 		ID3D12Resource* m_pRingBuffer = nullptr;
+		uint8_t* m_pMappedPtr = nullptr;
 
 		uint64_t m_bufferOffset = INVALID_UINT64;
 		uint64_t m_maxSize = INVALID_UINT64;

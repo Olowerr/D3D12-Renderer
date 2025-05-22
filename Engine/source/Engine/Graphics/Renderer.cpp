@@ -46,10 +46,12 @@ namespace Okay
 		m_dsvIncrementSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
 		m_ringBuffer.initialize(m_pDevice, 50'000'000);
+		m_ringBuffer.map();
+
 		m_descriptorHeapStore.initialize(m_pDevice, 50);
 		m_gpuResourceManager.initialize(m_pDevice, m_commandContext, m_ringBuffer, m_descriptorHeapStore);
 		
-		m_lightHandler.initiate(m_pDevice, m_gpuResourceManager, m_commandContext, m_ringBuffer, m_dxMeshes);
+		m_lightHandler.initiate(m_pDevice, m_gpuResourceManager, m_commandContext, m_dxMeshes);
 
 		fetchBackBuffersAndDSV();
 		createRenderPasses(); // need to be after fetching backBuffers cuz it needs the main viewport
@@ -81,7 +83,10 @@ namespace Okay
 
 		m_commandContext.shutdown();
 		m_gpuResourceManager.shutdown();
+
+		m_ringBuffer.unmap();
 		m_ringBuffer.shutdown();
+
 		m_descriptorHeapStore.shutdown();
 		m_lightHandler.shutdown();
 
@@ -137,40 +142,19 @@ namespace Okay
 		const Transform& camTransform = camEntity.getComponent<Transform>();
 		const Camera& cameraComp = camEntity.getComponent<Camera>();
 
-		auto pointLightView = scene.getRegistry().view<PointLight, Transform>();
-		auto directionalLightView = scene.getRegistry().view<DirectionalLight, Transform>();
-		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
-
-		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
-		uint64_t ringBufferOffset = 0;
-
-
+		
 		m_lightHandler.newFrame();
 
-		m_pointLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferOffset;
-		ringBufferOffset += m_lightHandler.writePointLightGPUData(scene, pMappedRingBuffer + ringBufferOffset, &mainRenderData.numPointLights);
-
-		m_directionalLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferOffset;
-		ringBufferOffset += m_lightHandler.writeDirLightGPUData(scene, pMappedRingBuffer + ringBufferOffset, &mainRenderData.numDirectionalLights);
-
-		m_spotLightsGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferOffset;
-		ringBufferOffset += m_lightHandler.writeSpotLightGPUData(scene, pMappedRingBuffer + ringBufferOffset, &mainRenderData.numSpotLights);
+		m_pointLightsGVA = m_lightHandler.writePointLightGPUData(scene, m_ringBuffer, &mainRenderData.numPointLights);
+		m_directionalLightsGVA = m_lightHandler.writeDirLightGPUData(scene, m_ringBuffer, &mainRenderData.numDirectionalLights);
+		m_spotLightsGVA = m_lightHandler.writeSpotLightGPUData(scene, m_ringBuffer, &mainRenderData.numSpotLights);
 
 
 		mainRenderData.cameraPos = camTransform.position;
 		mainRenderData.cameraDir = camTransform.forwardVec();
 		mainRenderData.viewProjMatrix = glm::transpose(cameraComp.getProjectionMatrix(m_viewport.Width, m_viewport.Height) * camTransform.getViewMatrix());
 
-		mainRenderData.numPointLights = (uint32_t)pointLightView.size_hint();
-		mainRenderData.numDirectionalLights = (uint32_t)directionalLightView.size_hint();
-		mainRenderData.numSpotLights = (uint32_t)spotLightView.size_hint();
-
-		m_renderDataGVA = m_ringBuffer.getCurrentGPUAddress() + ringBufferOffset;
-		memcpy(pMappedRingBuffer + ringBufferOffset, &mainRenderData, sizeof(GPURenderData));
-		ringBufferOffset += alignAddress64(sizeof(GPURenderData), BUFFER_DATA_ALIGNMENT);
-
-
-		m_ringBuffer.unmap(ringBufferOffset);
+		m_renderDataGVA = m_ringBuffer.allocateMapped(&mainRenderData, sizeof(GPURenderData));
 	}
 
 	void Renderer::preRender(D3D12_CPU_DESCRIPTOR_HANDLE* pOutCurrentBB)
@@ -193,7 +177,7 @@ namespace Okay
 	{
 		assignObjectDrawGroups(scene);
 
-		m_lightHandler.drawDepthMaps(m_drawGroups, m_activeDrawGroups);
+		m_lightHandler.drawDepthMaps(m_drawGroups, m_activeDrawGroups, m_ringBuffer);
 
 		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
 		m_mainRenderPass.bind(pCommandList, 1, &currentMainRtv, &m_mainDsvCpuHandle, 1);
@@ -272,10 +256,6 @@ namespace Okay
 
 
 		// Upload ObjectDatas
-
-		uint8_t* pMappedRingBuffer = m_ringBuffer.map();
-		uint64_t writtenBytes = 0;
-
 		D3D12_GPU_VIRTUAL_ADDRESS drawGroupObjectDatasVA = m_ringBuffer.getCurrentGPUAddress();
 
 		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
@@ -286,20 +266,19 @@ namespace Okay
 			{
 				auto [meshRenderer, transform] = meshRendererView[entity];
 
-				GPUObjectData* pObjectData = (GPUObjectData*)pMappedRingBuffer;
+				GPUObjectData* pObjectData = (GPUObjectData*)m_ringBuffer.getMappedPtr();
 				pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
 				pObjectData->diffuseTextureIdx = meshRenderer.diffuseTextureID;
 				pObjectData->normalMapIdx = meshRenderer.normalMapID;
 
-				pMappedRingBuffer += sizeof(GPUObjectData);
-				writtenBytes += sizeof(GPUObjectData);
+				m_ringBuffer.offsetMappedPtr(sizeof(GPUObjectData));
 			}
 
 			drawGroup.objectDatasVA = drawGroupObjectDatasVA;
 			drawGroupObjectDatasVA += drawGroup.entities.size() * sizeof(GPUObjectData);
 		}
 
-		m_ringBuffer.unmap(writtenBytes);
+		m_ringBuffer.alignOffset();
 	}
 
 	void Renderer::createDevice(IDXGIFactory* pFactory)

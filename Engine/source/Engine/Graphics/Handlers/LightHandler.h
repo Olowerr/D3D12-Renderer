@@ -25,21 +25,21 @@ namespace Okay
 		LightHandler() = default;
 		virtual ~LightHandler() = default;
 
-		void initiate(ID3D12Device* pDevice, GPUResourceManager& gpuResourceManager, CommandContext& commandContext, RingBuffer& ringBuffer, const std::vector<DXMesh>& dxMeshes);
+		void initiate(ID3D12Device* pDevice, GPUResourceManager& gpuResourceManager, CommandContext& commandContext, const std::vector<DXMesh>& dxMeshes);
 		void shutdown();
 
 		void setShadowMapDescritprHeap(DescriptorHeapStore& store, DescriptorHeapHandle shadowMapHandle, uint32_t offset);
 
-		uint64_t writePointLightGPUData(const Scene& scene, uint8_t* pWriteLocation, uint32_t* pOutNumPointLights);
-		uint64_t writeDirLightGPUData(const Scene& scene, uint8_t* pWriteLocation, uint32_t* pOutNumDirLights);
-		uint64_t writeSpotLightGPUData(const Scene& scene, uint8_t* pWriteLocation, uint32_t* pOutNumSpotLights);
+		D3D12_GPU_VIRTUAL_ADDRESS writePointLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumPointLights);
+		D3D12_GPU_VIRTUAL_ADDRESS writeDirLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumDirLights);
+		D3D12_GPU_VIRTUAL_ADDRESS writeSpotLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumSpotLights);
 
-		void drawDepthMaps(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups);
+		void drawDepthMaps(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, RingBuffer& ringBuffer);
 		void newFrame();
 
 	private:
 		void preDepthMapRender();
-		void drawDepthMap_Internal(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, uint8_t* pMappedRingBuffer, const ShadowMap& shadowMap, uint32_t shadowBarrierIdx);
+		void drawDepthMap_Internal(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, const ShadowMap& shadowMap, uint32_t shadowBarrierIdx);
 
 		template<uint32_t containerSize>
 		void trySetShadowMapData(StaticContainer<ShadowMap, containerSize>& container, bool isCubeMap, glm::mat4* pViewProjMatrices, glm::vec3 lightPos, uint32_t* pOutShadowMapIdx);
@@ -54,7 +54,6 @@ namespace Okay
 
 		GPUResourceManager* m_pGpuResourceManager = nullptr;
 		CommandContext* m_pCommandContext = nullptr;
-		RingBuffer* m_pRingBuffer = nullptr;
 		const std::vector<DXMesh>* m_pDxMeshes;
 
 		DescriptorHeapStore* m_pDescriptorHeapStore = nullptr;
