@@ -241,7 +241,7 @@ namespace Okay
 		for (uint32_t i = 0; i < m_shadowMapPool.m_numActive; i++)
 		{
 			s_shadowMapBarriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			s_shadowMapBarriers[i].Transition.pResource = m_pGpuResourceManager->getDXResource(m_shadowMapPool[i].textureAllocation.resourceHandle);
+			s_shadowMapBarriers[i].Transition.pResource = m_shadowMapPool[i].textureAllocation.pDXResource;
 			s_shadowMapBarriers[i].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 			s_shadowMapBarriers[i].Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
 			s_shadowMapBarriers[i].Transition.Subresource = 0;
@@ -251,7 +251,7 @@ namespace Okay
 		{
 			uint32_t barrierIdx = i + m_shadowMapPool.m_numActive;
 			s_shadowMapBarriers[barrierIdx].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			s_shadowMapBarriers[barrierIdx].Transition.pResource = m_pGpuResourceManager->getDXResource(m_shadowMapCubePool[i].textureAllocation.resourceHandle);
+			s_shadowMapBarriers[barrierIdx].Transition.pResource = m_shadowMapCubePool[i].textureAllocation.pDXResource;
 			s_shadowMapBarriers[barrierIdx].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 			s_shadowMapBarriers[barrierIdx].Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
 			s_shadowMapBarriers[barrierIdx].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
@@ -289,7 +289,7 @@ namespace Okay
 		}
 
 		s_shadowMapBarriers[shadowBarrierIdx].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		s_shadowMapBarriers[shadowBarrierIdx].Transition.pResource = m_pGpuResourceManager->getDXResource(shadowMap.textureAllocation.resourceHandle);
+		s_shadowMapBarriers[shadowBarrierIdx].Transition.pResource = shadowMap.textureAllocation.pDXResource;
 		s_shadowMapBarriers[shadowBarrierIdx].Transition.StateBefore = D3D12_RESOURCE_STATE_DEPTH_WRITE;
 		s_shadowMapBarriers[shadowBarrierIdx].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
 		s_shadowMapBarriers[shadowBarrierIdx].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
@@ -377,7 +377,7 @@ namespace Okay
 		shadowMap.textureAllocation = m_pGpuResourceManager->createTexture(width, height, 1, arraySize, DXGI_FORMAT_R32_TYPELESS,
 			OKAY_TEXTURE_FLAG_DEPTH | OKAY_TEXTURE_FLAG_SHADER_READ, nullptr);
 
-		ID3D12Resource* pDXTexture = m_pGpuResourceManager->getDXResource(shadowMap.textureAllocation.resourceHandle);
+		ID3D12Resource* pDXTexture = shadowMap.textureAllocation.pDXResource;
 
 
 		DescriptorDesc srvDesc = {};

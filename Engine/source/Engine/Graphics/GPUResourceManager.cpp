@@ -80,6 +80,7 @@ namespace Okay
 
 		Allocation allocation = {};
 		allocation.resourceHandle = ResourceHandle(m_resources.size() - 1);
+		allocation.pDXResource = resource.pDXResource;
 		allocation.resourceOffset = 0;
 		allocation.elementSize = resource.maxSize;
 		allocation.numElements = 1;
@@ -87,42 +88,42 @@ namespace Okay
 		return allocation;
 	}
 
-	ResourceHandle GPUResourceManager::createResource(D3D12_HEAP_TYPE heapType, uint64_t size)
+	Resource GPUResourceManager::createResource(D3D12_HEAP_TYPE heapType, uint64_t size)
 	{
 		size = alignAddress64(size, BUFFER_DATA_ALIGNMENT);
 
-		ResourceHandle handle = (ResourceHandle)m_resources.size();
-
 		Resource& resource = m_resources.emplace_back();
 
+		resource.handle = ResourceHandle(m_resources.size() - 1);
 		resource.pDXResource = m_heapStore.requestResource(heapType, size, 1, 1, 1, DXGI_FORMAT_UNKNOWN, nullptr, false);
 		resource.heapType = heapType;
 
 		resource.nextAppendOffset = 0;
 		resource.maxSize = size;
 
-		return handle;
+		return resource;
 	}
 
-	Allocation GPUResourceManager::allocateInto(ResourceHandle handle, uint64_t offset, uint64_t elementSize, uint32_t numElements, const void* pData)
+	Allocation GPUResourceManager::allocateInto(Resource resource, uint64_t offset, uint64_t elementSize, uint32_t numElements, const void* pData)
 	{
-		validateResourceHandle(handle);
-		Resource& resource = m_resources[handle];
+		validateResourceHandle(resource.handle);
+		Resource& resourceRef = m_resources[resource.handle];
 
 		if (offset == 0 && elementSize == 0 && numElements == 1)
 		{
-			elementSize = resource.maxSize;
+			elementSize = resourceRef.maxSize;
 		}
 		else if (offset == OKAY_RESOURCE_APPEND)
 		{
-			offset = resource.nextAppendOffset;
-			OKAY_ASSERT(offset + elementSize * numElements <= resource.maxSize);
+			offset = resourceRef.nextAppendOffset;
+			OKAY_ASSERT(offset + elementSize * numElements <= resourceRef.maxSize);
 		}
 
-		resource.nextAppendOffset += alignAddress64(elementSize * numElements, BUFFER_DATA_ALIGNMENT);
+		resourceRef.nextAppendOffset += alignAddress64(elementSize * numElements, BUFFER_DATA_ALIGNMENT);
 
 		Allocation allocation = {};
-		allocation.resourceHandle = handle;
+		allocation.resourceHandle = resourceRef.handle;
+		allocation.pDXResource = resourceRef.pDXResource;
 		allocation.resourceOffset = alignAddress64(offset, BUFFER_DATA_ALIGNMENT);
 		allocation.elementSize = elementSize;
 		allocation.numElements = numElements;
@@ -150,46 +151,19 @@ namespace Okay
 		}
 	}
 
-	ID3D12Resource* GPUResourceManager::getDXResource(ResourceHandle handle)
-	{
-		validateResourceHandle(handle);
-		return m_resources[handle].pDXResource;
-	}
-
 	D3D12_GPU_VIRTUAL_ADDRESS GPUResourceManager::getVirtualAddress(const Allocation& allocation)
 	{
-		ID3D12Resource* pDXResource = getDXResource(allocation.resourceHandle);
-		return pDXResource->GetGPUVirtualAddress() + allocation.resourceOffset;
-	}
-
-	void* GPUResourceManager::mapResource(ResourceHandle handle)
-	{
-		ID3D12Resource* pDXResource = getDXResource(handle);
-
-		D3D12_RANGE readRange = { 0, 0 };
-
-		void* pMappedData = nullptr;
-		DX_CHECK(pDXResource->Map(0, &readRange, &pMappedData));
-
-		return pMappedData;
-	}
-
-	void GPUResourceManager::unmapResource(ResourceHandle handle)
-	{
-		ID3D12Resource* pDXResource = getDXResource(handle);
-		pDXResource->Unmap(0, nullptr);
+		return allocation.pDXResource->GetGPUVirtualAddress() + allocation.resourceOffset;
 	}
 
 	DescriptorDesc GPUResourceManager::createDescriptorDesc(const Allocation& allocation, DescriptorType type, bool nullDesc)
 	{
 		OKAY_ASSERT(type != OKAY_DESCRIPTOR_TYPE_NONE);
 
-		ID3D12Resource* pDXResource = getDXResource(allocation.resourceHandle);
-
 		DescriptorDesc desc = {};
 		desc.type = type;
 		desc.nullDesc = nullDesc;
-		desc.pDXResource = pDXResource;
+		desc.pDXResource = allocation.pDXResource;
 
 		if (nullDesc)
 		{
@@ -210,7 +184,7 @@ namespace Okay
 			break;
 
 		case OKAY_DESCRIPTOR_TYPE_CBV:
-			desc.cbvDesc.BufferLocation = pDXResource->GetGPUVirtualAddress() + allocation.resourceOffset;
+			desc.cbvDesc.BufferLocation = allocation.pDXResource->GetGPUVirtualAddress() + allocation.resourceOffset;
 			desc.cbvDesc.SizeInBytes = alignAddress32((uint32_t)allocation.elementSize * allocation.numElements, BUFFER_DATA_ALIGNMENT);
 			break;
 

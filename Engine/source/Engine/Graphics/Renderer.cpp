@@ -351,8 +351,7 @@ namespace Okay
 		DescriptorDesc dsvDesc = m_gpuResourceManager.createDescriptorDesc(dsAllocation, OKAY_DESCRIPTOR_TYPE_DSV, true);
 		m_mainDsvCpuHandle = m_descriptorHeapStore.allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, &dsvDesc, 1).cpuHandle;
 
-		ID3D12Resource* pDsvResource = m_gpuResourceManager.getDXResource(dsAllocation.resourceHandle);
-		m_commandContext.transitionResource(pDsvResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+		m_commandContext.transitionResource(dsAllocation.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
 		// Find viewport & scissor rect
 		D3D12_RESOURCE_DESC backBufferDesc = m_backBuffers[0]->GetDesc();
@@ -433,8 +432,8 @@ namespace Okay
 			indiciesResourceSize += alignAddress64(meshData.indicies.size() * sizeof(uint32_t), BUFFER_DATA_ALIGNMENT);
 		}
 
-		ResourceHandle verticiesRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, verticiesResourceSize);
-		ResourceHandle indiciesRH = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, indiciesResourceSize);
+		Resource verticiesR = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, verticiesResourceSize);
+		Resource indiciesR = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, indiciesResourceSize);
 
 		m_dxMeshes.resize(meshes.size());
 
@@ -443,8 +442,8 @@ namespace Okay
 			const std::vector<Vertex>& verticies = meshes[i].getMeshData().verticies;
 			const std::vector<uint32_t>& indicies = meshes[i].getMeshData().indicies;
 
-			Allocation verticiesAlloc = m_gpuResourceManager.allocateInto(verticiesRH, OKAY_RESOURCE_APPEND, sizeof(Vertex), (uint32_t)verticies.size(), verticies.data());
-			Allocation indiciesAlloc = m_gpuResourceManager.allocateInto(indiciesRH, OKAY_RESOURCE_APPEND, sizeof(uint32_t), (uint32_t)indicies.size(), indicies.data());
+			Allocation verticiesAlloc = m_gpuResourceManager.allocateInto(verticiesR, OKAY_RESOURCE_APPEND, sizeof(Vertex), (uint32_t)verticies.size(), verticies.data());
+			Allocation indiciesAlloc = m_gpuResourceManager.allocateInto(indiciesR, OKAY_RESOURCE_APPEND, sizeof(uint32_t), (uint32_t)indicies.size(), indicies.data());
 
 			m_dxMeshes[i].gpuVerticiesGVA = m_gpuResourceManager.getVirtualAddress(verticiesAlloc);
 
@@ -455,7 +454,7 @@ namespace Okay
 			m_dxMeshes[i].numIndicies = (uint32_t)indicies.size();
 		}
 
-		m_commandContext.transitionResource(m_gpuResourceManager.getDXResource(indiciesRH), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+		m_commandContext.transitionResource(indiciesR.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	}
 
 	void Renderer::preProcessTextures(const std::vector<Texture>& textures)

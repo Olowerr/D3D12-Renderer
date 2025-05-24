@@ -34,17 +34,13 @@ namespace Okay
 
 		Allocation createTexture(uint32_t width, uint32_t height, uint16_t mipLevels, uint32_t arraySize, DXGI_FORMAT format, uint32_t flags, const void* pData);
 
-		ResourceHandle createResource(D3D12_HEAP_TYPE heapType, uint64_t size);
-		Allocation allocateInto(ResourceHandle handle, uint64_t offset, uint64_t elementSize, uint32_t numElements, const void* pData);
+		Resource createResource(D3D12_HEAP_TYPE heapType, uint64_t size);
+		Allocation allocateInto(Resource resource, uint64_t offset, uint64_t elementSize, uint32_t numElements, const void* pData);
 
 		// TODO: Rename to updateAllocation?
 		void updateBuffer(const Allocation& allocation, const void* pData);
 
-		ID3D12Resource* getDXResource(ResourceHandle handle);
 		D3D12_GPU_VIRTUAL_ADDRESS getVirtualAddress(const Allocation& allocation);
-
-		void* mapResource(ResourceHandle handle);
-		void unmapResource(ResourceHandle handle);
 
 		DescriptorDesc createDescriptorDesc(const Allocation& allocation, DescriptorType type, bool nullDesc);
 

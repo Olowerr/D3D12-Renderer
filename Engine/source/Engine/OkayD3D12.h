@@ -47,6 +47,8 @@ namespace Okay
 	struct Allocation
 	{
 		ResourceHandle resourceHandle = INVALID_RH;
+		ID3D12Resource* pDXResource = nullptr;
+
 		uint64_t resourceOffset = INVALID_UINT64;
 
 		uint64_t elementSize = INVALID_UINT64;
@@ -55,7 +57,9 @@ namespace Okay
 
 	struct Resource
 	{
+		ResourceHandle handle = INVALID_RH;
 		ID3D12Resource* pDXResource = nullptr;
+
 		D3D12_HEAP_TYPE heapType = D3D12_HEAP_TYPE(-1);
 
 		uint64_t maxSize = INVALID_UINT64;
