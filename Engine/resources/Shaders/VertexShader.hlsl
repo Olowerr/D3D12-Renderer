@@ -53,14 +53,14 @@ OutputVertex main(uint vertexId : SV_VERTEXID, uint instanceID : SV_INSTANCEID)
     InputVertex inputVertex = verticies[vertexId];
     float4x4 worldMatrix = objectDatas[instanceID].objectMatrix;
 	
-    output.worldPosition = mul(float4(inputVertex.position, 1.f), worldMatrix);
+    output.worldPosition = mul(float4(inputVertex.position, 1.f), worldMatrix).xyz;
 	output.svPosition = mul(float4(output.worldPosition, 1.f), viewProjMatrix);
 	
     output.uv = inputVertex.uv;
 
-    float3 worldNormal = normalize(mul(float4(inputVertex.normal, 0.f), worldMatrix));
-    float3 worldTangent = normalize(mul(float4(inputVertex.tangent, 0.f), worldMatrix));
-    float3 worldBiTangent = normalize(mul(float4(inputVertex.biTangent, 0.f), worldMatrix));
+    float3 worldNormal = normalize(mul(float4(inputVertex.normal, 0.f), worldMatrix)).xyz;
+    float3 worldTangent = normalize(mul(float4(inputVertex.tangent, 0.f), worldMatrix)).xyz;
+    float3 worldBiTangent = normalize(mul(float4(inputVertex.biTangent, 0.f), worldMatrix)).xyz;
     output.tbnMatrix = float3x3(worldTangent, worldBiTangent, worldNormal);
 	
     output.instanceID = instanceID;

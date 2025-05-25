@@ -190,15 +190,14 @@ namespace Okay
 		if (FAILED(hr))
 		{
 			const char* pErrorMsg = pErrorBlob ? (const char*)pErrorBlob->GetBufferPointer() : "No errors produced, file might not have been found.";
-
-			printf("Shader Compilation failed\n    Path: %ls\n    Error: %s\n", path.c_str(), pErrorMsg);
+			printf("Shader Compilation failed:\n%s\n", pErrorMsg);
 			OKAY_ASSERT(false);
 		}
 
 		if (pErrorBlob)
 		{
 			const char* pErrorMsg = (const char*)pErrorBlob->GetBufferPointer();
-			printf("Shader Compilation message\n    Path: %ls\n    Message: %s\n", path.c_str(), pErrorMsg);
+			printf("Shader Compilation message:\n%s\n", pErrorMsg);
 		}
 
 		D3D12_RELEASE(pErrorBlob);
