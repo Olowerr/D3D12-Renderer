@@ -1,9 +1,14 @@
 
+#include "Utilities/ShadowSampleOffsets.hlsli"
+
 #define UINT_MAX (~0u)
 #define INVALID_UINT32 UINT_MAX
 
 #define MAX_SHADOW_MAPS 32
 #define MAX_POINT_SHADOW_CUBES 8
+
+#define NUM_SHADOW_SAMPLES 64
+#define NUM_EARLY_SHADOW_SAMPLES 4
 
 // Structs
 struct InputData
@@ -87,9 +92,17 @@ TextureCube<unorm float> shadowMapCubes[MAX_POINT_SHADOW_CUBES] : register(t7, s
 // Samplers
 SamplerState pointSampler : register(s0, space0);
 SamplerState anisotropicSampler : register(s1, space0);
+SamplerState linearSampler : register(s2, space0);
 
 
 // --- Functions
+
+float randomFloat(float3 seed, uint i)
+{
+    float4 seed4 = float4(seed, (float) i);
+    float dotty = dot(seed4, float4(12.9898, 78.233, 45.164, 94.673));
+    return frac(sin(dotty) * 43758.5453);
+}
 
 float3 sampleNormalMap(uint normalMapIdx, float2 uv, float3x3 tbnMatrix)
 {
@@ -102,6 +115,17 @@ float3 sampleNormalMap(uint normalMapIdx, float2 uv, float3x3 tbnMatrix)
     return normalize(mul(normal, tbnMatrix));
 }
 
+float sampleShadowMap(Texture2D<unorm float> shadowMap, uint offsetIdx, float2 shadowMapTexelSize, float4 worldLightNDC, float3 worldNormal, float3 worldToLight)
+{
+    float2 uvOffset = SHADOW_OFFSETS[offsetIdx].xy * shadowMapTexelSize;
+    float shadowMapDepth = shadowMap.SampleLevel(linearSampler, worldLightNDC.xy + uvOffset, 0.f).r;
+            
+    float bias = 0.000001f * tan(acos(max(dot(worldNormal, worldToLight), 0.f)));
+    bias = clamp(bias, 0, 0.00001f);
+        
+    return shadowMapDepth > worldLightNDC.z - bias ? 1.f : 0.f;
+}
+
 float getShadowValue(uint shadowMapIdx, float4x4 lightViewProjMatrix, float3 worldNormal, float3 worldToLight, float3 worldPosition)
 {
     if (shadowMapIdx == INVALID_UINT32)
@@ -109,17 +133,40 @@ float getShadowValue(uint shadowMapIdx, float4x4 lightViewProjMatrix, float3 wor
         return 0.f;
     }
 
+
     float4 worldLightNDC = mul(float4(worldPosition, 1.f), lightViewProjMatrix);
 
     worldLightNDC.xyz /= worldLightNDC.w;
     worldLightNDC.xy = float2(worldLightNDC.x * 0.5f + 0.5f, worldLightNDC.y * -0.5f + 0.5f);
-        
-    float shadowMapDepth = shadowMaps[shadowMapIdx].SampleLevel(pointSampler, worldLightNDC.xy, 0.f).r;
-            
-    float bias = 0.000001f * tan(acos(max(dot(worldNormal, worldToLight), 0.f)));
-    bias = clamp(bias, 0, 0.00001f);
+    
+    Texture2D<unorm float> shadowMap = shadowMaps[shadowMapIdx];
+    
+    float2 shadowMapTexelSize;
+    float numberOfLevels; //?
+    shadowMap.GetDimensions(0, shadowMapTexelSize.x, shadowMapTexelSize.y, numberOfLevels);
+    shadowMapTexelSize = 1.f / shadowMapTexelSize;
+    
+    float shadowValue = 0;
+    uint i = 0;
 
-    return shadowMapDepth > worldLightNDC.z - bias;
+    for (i = 0; i < NUM_EARLY_SHADOW_SAMPLES; i++)
+    {
+        shadowValue += sampleShadowMap(shadowMap, i, shadowMapTexelSize, worldLightNDC, worldNormal, worldToLight);
+    }
+
+    // If all early samples are either 1 or 0, early out
+    if (shadowValue == 0.f || shadowValue == (float)NUM_EARLY_SHADOW_SAMPLES)
+    {
+        return shadowValue * (1.f / NUM_EARLY_SHADOW_SAMPLES);
+    }
+    
+
+    for (i = NUM_EARLY_SHADOW_SAMPLES; i < NUM_SHADOW_SAMPLES; i++)
+    {
+        shadowValue += sampleShadowMap(shadowMap, i, shadowMapTexelSize, worldLightNDC, worldNormal, worldToLight);
+    }
+
+    return shadowValue * (1.f / NUM_SHADOW_SAMPLES);
 }
 
 float getShadowValueCube(uint shadowMapIdx, float3 lightVec, float distToLight, float farPlane)
@@ -129,10 +176,10 @@ float getShadowValueCube(uint shadowMapIdx, float3 lightVec, float distToLight, 
         return 0.f;
     }
 
-    float shadowMapDepth = shadowMapCubes[shadowMapIdx].SampleLevel(pointSampler, lightVec, 0.f).r;
+    float shadowMapDepth = shadowMapCubes[shadowMapIdx].SampleLevel(linearSampler, lightVec, 0.f).r;
     shadowMapDepth *= farPlane;
-    
-    return shadowMapDepth > distToLight;
+        
+    return shadowMapDepth > distToLight ? 1.f : 0.f;
 }
 
 float4 main(InputData input) : SV_TARGET

@@ -6,6 +6,7 @@
 #include <cassert>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 
 // Will be defined to not check in dist builds
 #define OKAY_ASSERT(condition)																	\
@@ -37,4 +38,21 @@ namespace Okay
 		glm::vec3 tangent = glm::vec3(0.f);
 		glm::vec3 biTangent = glm::vec3(0.f);
 	};
+
+	static bool readBinary(FilePath binPath, std::string& output)
+	{
+		std::ifstream reader(binPath.c_str(), std::ios::binary);
+		if (!reader)
+		{
+			return false;
+		}
+
+		reader.seekg(0, std::ios::end);
+		output.reserve((size_t)reader.tellg());
+		reader.seekg(0, std::ios::beg);
+
+		output.assign(std::istreambuf_iterator<char>(reader), std::istreambuf_iterator<char>());
+
+		return true;
+	}
 }

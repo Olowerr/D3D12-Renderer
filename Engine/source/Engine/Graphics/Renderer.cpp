@@ -362,7 +362,7 @@ namespace Okay
 
 	void Renderer::createRenderPasses()
 	{
-		D3D12_STATIC_SAMPLER_DESC samplers[2] = {};
+		D3D12_STATIC_SAMPLER_DESC samplers[3] = {};
 		samplers[0] = createDefaultStaticPointSamplerDesc();
 		samplers[0].ShaderRegister = 0;
 
@@ -370,6 +370,10 @@ namespace Okay
 		samplers[1].Filter = D3D12_FILTER_ANISOTROPIC;
 		samplers[1].MaxAnisotropy = 4;
 		samplers[1].ShaderRegister = 1;
+
+		samplers[2] = samplers[0];
+		samplers[2].Filter = D3D12_FILTER_MIN_POINT_MAG_MIP_LINEAR;;
+		samplers[2].ShaderRegister = 2;
 
 		std::vector<D3D12_ROOT_PARAMETER> rootParams = {};
 		rootParams.reserve(32);

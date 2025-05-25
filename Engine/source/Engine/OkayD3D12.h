@@ -145,6 +145,34 @@ namespace Okay
 		printf("Shared System Memory: %.2f GB\n\n", adapterDesc.SharedSystemMemory / 1'000'000'000.f);
 	}
 
+	class IncludeReader : public ID3DInclude
+	{
+	public:
+		// Inherited via ID3DInclude
+		virtual HRESULT __stdcall Open(D3D_INCLUDE_TYPE IncludeType, LPCSTR pFileName, LPCVOID pParentData, LPCVOID* ppData, UINT* pBytes) override
+		{
+			if (!Okay::readBinary(SHADER_PATH / pFileName, m_includeBuffer))
+			{
+				return E_FAIL;
+			}
+
+			*ppData = m_includeBuffer.c_str();
+			*pBytes = (uint32_t)m_includeBuffer.size();
+
+			return S_OK;
+		}
+
+		virtual HRESULT __stdcall Close(LPCVOID pData) override
+		{
+			m_includeBuffer.clear();
+			m_includeBuffer.shrink_to_fit();
+			return S_OK;
+		}
+
+	private:
+		std::string m_includeBuffer;
+	};
+
 	inline D3D12_SHADER_BYTECODE compileShader(FilePath path, std::string_view version, ID3DBlob** pShaderBlob)
 	{
 		ID3DBlob* pErrorBlob = nullptr;
@@ -152,16 +180,25 @@ namespace Okay
 #ifdef _DEBUG
 		uint32_t flags1 = D3DCOMPILE_DEBUG;
 #else
-		uint32_t flags1 = D3DCOMPILE_OPTIMIZATION_LEVEL2;;
+		uint32_t flags1 = D3DCOMPILE_OPTIMIZATION_LEVEL2;
 #endif
 
-		HRESULT hr = D3DCompileFromFile(path.c_str(), nullptr, nullptr, "main", version.data(), flags1, 0, pShaderBlob, &pErrorBlob);
+		IncludeReader includer;
+
+		HRESULT hr = D3DCompileFromFile(path.c_str(), nullptr, &includer, "main", version.data(), flags1, 0, pShaderBlob, &pErrorBlob);
+
 		if (FAILED(hr))
 		{
 			const char* pErrorMsg = pErrorBlob ? (const char*)pErrorBlob->GetBufferPointer() : "No errors produced, file might not have been found.";
 
 			printf("Shader Compilation failed\n    Path: %ls\n    Error: %s\n", path.c_str(), pErrorMsg);
 			OKAY_ASSERT(false);
+		}
+
+		if (pErrorBlob)
+		{
+			const char* pErrorMsg = (const char*)pErrorBlob->GetBufferPointer();
+			printf("Shader Compilation message\n    Path: %ls\n    Message: %s\n", path.c_str(), pErrorMsg);
 		}
 
 		D3D12_RELEASE(pErrorBlob);

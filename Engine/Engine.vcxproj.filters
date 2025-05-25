@@ -182,4 +182,7 @@
     <FxCompile Include="resources\shaders\ShadowCubeGS.hlsl" />
     <FxCompile Include="resources\shaders\ShadowCubeVS.hlsl" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="resources\shaders\Utilities\ShadowSampleOffsets.hlsli" />
+  </ItemGroup>
 </Project>
