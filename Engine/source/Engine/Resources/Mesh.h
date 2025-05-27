@@ -30,8 +30,11 @@ namespace Okay
 
 		inline void clearData()
 		{
-			m_meshData.verticies.resize(0);
-			m_meshData.indicies.resize(0);
+			m_meshData.verticies.clear();
+			m_meshData.indicies.clear();
+
+			m_meshData.verticies.shrink_to_fit();
+			m_meshData.indicies.shrink_to_fit();
 		}
 
 	private:

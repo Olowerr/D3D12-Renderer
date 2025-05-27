@@ -4,12 +4,8 @@ namespace Okay
 {
 	void RingBuffer::initialize(ID3D12Device* pDevice, uint64_t size)
 	{
-		size = alignAddress64(size, RESOURCE_PLACEMENT_ALIGNMENT);
-
-		createBuffer(pDevice, size);
-
-		m_bufferOffset = 0;
-		m_maxSize = size;
+		m_pDevice = pDevice;
+		resize(size);
 	}
 	
 	void RingBuffer::shutdown()
@@ -36,6 +32,7 @@ namespace Okay
 
 	void RingBuffer::offsetMappedPtr(uint64_t offset)
 	{
+		OKAY_ASSERT(m_bufferOffset + offset <= m_maxSize);
 		m_bufferOffset += offset;
 	}
 
@@ -47,6 +44,7 @@ namespace Okay
 	void RingBuffer::alignOffset(uint32_t alignment)
 	{
 		m_bufferOffset = alignAddress64(m_bufferOffset, alignment);
+		OKAY_ASSERT(m_bufferOffset <= m_maxSize);
 	}
 
 	D3D12_GPU_VIRTUAL_ADDRESS RingBuffer::getCurrentGPUAddress() const
@@ -83,7 +81,24 @@ namespace Okay
 		m_bufferOffset = 0;
 	}
 
-	void RingBuffer::createBuffer(ID3D12Device* pDevice, uint64_t size)
+	void RingBuffer::resize(uint64_t size)
+	{
+		bool wasMapped = m_pRingBuffer;
+		if (wasMapped)
+		{
+			unmap();
+		}
+
+		shutdown();
+		createBuffer(alignAddress64(size, RESOURCE_PLACEMENT_ALIGNMENT));
+
+		if (wasMapped)
+		{
+			map();
+		}
+	}
+
+	void RingBuffer::createBuffer(uint64_t size)
 	{
 		D3D12_HEAP_PROPERTIES heapProperties = {};
 		heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -108,7 +123,10 @@ namespace Okay
 		desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 		desc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
-		DX_CHECK(pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &desc,
+		DX_CHECK(m_pDevice->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &desc,
 			D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_pRingBuffer)));
+
+		m_bufferOffset = 0;
+		m_maxSize = size;
 	}
 }

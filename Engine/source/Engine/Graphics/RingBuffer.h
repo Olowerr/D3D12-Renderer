@@ -29,10 +29,13 @@ namespace Okay
 		ID3D12Resource* getDXResource() const;
 		void jumpToStart();
 
-	private:
-		void createBuffer(ID3D12Device* pDevice, uint64_t size);
+		void resize(uint64_t size);
 
 	private:
+		void createBuffer(uint64_t size);
+
+	private:
+		ID3D12Device* m_pDevice;
 		ID3D12Resource* m_pRingBuffer = nullptr;
 		uint8_t* m_pMappedPtr = nullptr;
 

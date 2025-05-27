@@ -115,6 +115,9 @@ namespace Okay
 	{
 		preProcessMeshes(resourceManager.getAll<Mesh>());
 		preProcessTextures(resourceManager.getAll<Texture>());
+
+		m_commandContext.flush();
+		m_ringBuffer.resize(100'000);
 	}
 
 	void Renderer::drawDrawGroups(ID3D12GraphicsCommandList* pCommandList)
