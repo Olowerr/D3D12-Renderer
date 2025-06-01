@@ -17,7 +17,7 @@ struct InputData
     float3 worldPosition : WORLD_POS;
     float2 uv : UV;
     float3x3 tbnMatrix : TBN_MATRIX;
-    uint instanceID : SV_InstanceID;
+    uint objDataIndex : OBJ_DATA_INDEX;
 };
 
 struct ObjectData
@@ -184,11 +184,11 @@ float getShadowValueCube(uint shadowMapIdx, float3 lightVec, float distToLight, 
 
 float4 main(InputData input) : SV_TARGET
 {
-    uint normalMapTextureIdx = objectDatas[input.instanceID].normalMapIdx;
+    uint normalMapTextureIdx = objectDatas[input.objDataIndex].normalMapIdx;
     float3 worldNormal = sampleNormalMap(normalMapTextureIdx, input.uv, input.tbnMatrix);
     float3 vertexNormal = normalize(input.tbnMatrix[2].xyz);
     
-    uint diffuseTextureIdx = objectDatas[input.instanceID].diffuseTextureIdx;
+    uint diffuseTextureIdx = objectDatas[input.objDataIndex].diffuseTextureIdx;
     float3 materialDiffuse = textures[diffuseTextureIdx].Sample(anisotropicSampler, input.uv).rgb;
 
     

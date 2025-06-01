@@ -278,14 +278,13 @@ namespace Okay
 		{
 			const DrawGroup& drawGroup = drawGroups[i];
 
-			const DXMesh& dxMesh = (*m_pDxMeshes)[drawGroup.dxMeshId];
-
-			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticiesGVA);
-			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
+			pCommandList->SetGraphicsRootShaderResourceView(1, drawGroup.verticiesGVA);
+			pCommandList->IASetIndexBuffer(&drawGroup.indiciesView);
 
 			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroup.objectDatasVA);
+			pCommandList->SetGraphicsRootShaderResourceView(3, drawGroup.batchedObjectDataIndicies);
 
-			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
+			pCommandList->DrawIndexedInstanced(drawGroup.numIndicies, 1, 0, 0, 0);
 		}
 
 		s_shadowMapBarriers[shadowBarrierIdx].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -436,6 +435,7 @@ namespace Okay
 		rootParams.emplace_back(createRootParamCBV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Light Data
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Verticies SRV
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 1, 0)); // Object datas (GPUObjcetData)
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 2, 0)); // Batched objData indicies (uint32_t)
 
 		D3D12_ROOT_SIGNATURE_DESC rootSignatureDesc = {};
 		rootSignatureDesc.NumParameters = (uint32_t)rootParams.size();

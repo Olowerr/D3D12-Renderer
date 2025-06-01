@@ -89,6 +89,9 @@ namespace Okay
 		uint32_t m_activeDrawGroups = INVALID_UINT32;
 		std::vector<DrawGroup> m_drawGroups;
 
+		Allocation m_batchedVertices;
+		Allocation m_batchedIndices;
+
 		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA = INVALID_UINT64;
 		D3D12_GPU_VIRTUAL_ADDRESS m_directionalLightsGVA = INVALID_UINT64;
 		D3D12_GPU_VIRTUAL_ADDRESS m_spotLightsGVA = INVALID_UINT64;

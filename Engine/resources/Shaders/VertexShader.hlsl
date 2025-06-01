@@ -15,7 +15,7 @@ struct OutputVertex
 	float3 worldPosition : WORLD_POS;
     float2 uv : UV;
     float3x3 tbnMatrix : TBN_MATRIX;
-    uint instanceID : SV_InstanceID;
+    uint objDataIndex : OBJ_DATA_INDEX;
 };
 
 struct ObjectData
@@ -42,16 +42,18 @@ cbuffer RenderDataCBuffer : register(b0, space0)
 // Structured Buffers
 StructuredBuffer<InputVertex> verticies : register(t0, space0);
 StructuredBuffer<ObjectData> objectDatas : register(t1, space0);
+StructuredBuffer<uint> batchedObjDataIndicies : register(t8, space0);
 
 
 // --- Functions
 
-OutputVertex main(uint vertexId : SV_VERTEXID, uint instanceID : SV_INSTANCEID)
+OutputVertex main(uint vertexId : SV_VERTEXID)
 {
 	OutputVertex output;
-
+    output.objDataIndex = batchedObjDataIndicies[vertexId];
+	
     InputVertex inputVertex = verticies[vertexId];
-    float4x4 worldMatrix = objectDatas[instanceID].objectMatrix;
+    float4x4 worldMatrix = objectDatas[output.objDataIndex].objectMatrix;
 	
     output.worldPosition = mul(float4(inputVertex.position, 1.f), worldMatrix).xyz;
 	output.svPosition = mul(float4(output.worldPosition, 1.f), viewProjMatrix);
@@ -63,7 +65,5 @@ OutputVertex main(uint vertexId : SV_VERTEXID, uint instanceID : SV_INSTANCEID)
     float3 worldBiTangent = normalize(mul(float4(inputVertex.biTangent, 0.f), worldMatrix)).xyz;
     output.tbnMatrix = float3x3(worldTangent, worldBiTangent, worldNormal);
 	
-    output.instanceID = instanceID;
-
 	return output;
 }

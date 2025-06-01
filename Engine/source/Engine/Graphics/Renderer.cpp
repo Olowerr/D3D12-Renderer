@@ -57,11 +57,23 @@ namespace Okay
 		createRenderPasses(); // need to be after fetching backBuffers cuz it needs the main viewport
 
 		m_activeDrawGroups = 0;
-		m_drawGroups.resize(50);
+		m_drawGroups.resize(10);
 		for (DrawGroup& drawGroup : m_drawGroups)
 		{
 			drawGroup.entities.reserve(50);
 		}
+
+		Resource batchVertices = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, sizeof(Vertex) * 200'000);
+		Resource batchIndices = m_gpuResourceManager.createResource(D3D12_HEAP_TYPE_DEFAULT, sizeof(uint32_t) * 1'000'000);
+
+		batchVertices.pDXResource->SetName(L"BatchedVertices");
+		batchIndices.pDXResource->SetName(L"BatchedIndices");
+
+		m_commandContext.transitionResource(batchIndices.pDXResource, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_INDEX_BUFFER);
+
+		m_batchedVertices = m_gpuResourceManager.allocateInto(batchVertices, 0, 0, 1, nullptr);
+		m_batchedIndices = m_gpuResourceManager.allocateInto(batchIndices, 0, 0, 1, nullptr);
+
 
 		// (Textures + Shadow maps)
 		// At this point we don't know the real number of textures, so just setting a high upper limit
@@ -116,8 +128,8 @@ namespace Okay
 		preProcessMeshes(resourceManager.getAll<Mesh>());
 		preProcessTextures(resourceManager.getAll<Texture>());
 
-		m_commandContext.flush();
-		m_ringBuffer.resize(100'000);
+		//m_commandContext.flush();
+		//m_ringBuffer.resize(100'000);
 	}
 
 	void Renderer::drawDrawGroups(ID3D12GraphicsCommandList* pCommandList)
@@ -126,14 +138,13 @@ namespace Okay
 		{
 			const DrawGroup& drawGroup = m_drawGroups[i];
 
-			const DXMesh& dxMesh = m_dxMeshes[drawGroup.dxMeshId];
-
-			pCommandList->SetGraphicsRootShaderResourceView(1, dxMesh.gpuVerticiesGVA);
-			pCommandList->IASetIndexBuffer(&dxMesh.indiciesView);
+			pCommandList->SetGraphicsRootShaderResourceView(1, drawGroup.verticiesGVA);
+			pCommandList->IASetIndexBuffer(&drawGroup.indiciesView);
 
 			pCommandList->SetGraphicsRootShaderResourceView(2, drawGroup.objectDatasVA);
+			pCommandList->SetGraphicsRootShaderResourceView(3, drawGroup.batchedObjectDataIndicies);
 
-			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
+			pCommandList->DrawIndexedInstanced(drawGroup.numIndicies, 1, 0, 0, 0);
 		}
 	}
 
@@ -189,10 +200,10 @@ namespace Okay
 		pCommandList->SetDescriptorHeaps(1, &pMaterialDXDescHeap);
 
 		pCommandList->SetGraphicsRootConstantBufferView(0, m_renderDataGVA);
-		pCommandList->SetGraphicsRootDescriptorTable(3, pMaterialDXDescHeap->GetGPUDescriptorHandleForHeapStart());
-		pCommandList->SetGraphicsRootShaderResourceView(4, m_pointLightsGVA);
-		pCommandList->SetGraphicsRootShaderResourceView(5, m_directionalLightsGVA);
-		pCommandList->SetGraphicsRootShaderResourceView(6, m_spotLightsGVA);
+		pCommandList->SetGraphicsRootDescriptorTable(4, pMaterialDXDescHeap->GetGPUDescriptorHandleForHeapStart());
+		pCommandList->SetGraphicsRootShaderResourceView(5, m_pointLightsGVA);
+		pCommandList->SetGraphicsRootShaderResourceView(6, m_directionalLightsGVA);
+		pCommandList->SetGraphicsRootShaderResourceView(7, m_spotLightsGVA);
 
 		drawDrawGroups(pCommandList);
 	}
@@ -211,7 +222,7 @@ namespace Okay
 		m_commandContext.transitionResource(m_backBuffers[m_currentBackBuffer], D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATE_PRESENT);
 
 		m_commandContext.execute();
-		m_pSwapChain->Present(1, 0);
+		m_pSwapChain->Present(0, DXGI_PRESENT_ALLOW_TEARING);
 
 		m_commandContext.wait();
 		m_commandContext.reset();
@@ -223,65 +234,130 @@ namespace Okay
 	{
 		auto meshRendererView = scene.getRegistry().view<MeshRenderer, Transform>();
 
-		for (DrawGroup& drawGroup : m_drawGroups)
+		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
 		{
-			drawGroup.entities.clear();
+			m_drawGroups[i].entities.clear();
 		}
 
-		m_activeDrawGroups = 0;
+		// Temp
+		m_activeDrawGroups = 1;
+		uint32_t objects = 0;
 		for (entt::entity entity : meshRendererView)
 		{
 			const MeshRenderer& meshRenderer = meshRendererView.get<MeshRenderer>(entity);
-
-			uint32_t drawGroupIdx = INVALID_UINT32;
-			for (uint32_t i = 0; i < m_activeDrawGroups; i++)
-			{
-				if (m_drawGroups[i].dxMeshId == meshRenderer.meshID)
-				{
-					drawGroupIdx = i;
-					break;
-				}
-			}
-
-			if (drawGroupIdx == INVALID_UINT32)
-			{
-				if (m_activeDrawGroups >= (uint32_t)m_drawGroups.size())
-				{
-					m_drawGroups.resize(m_drawGroups.size() + 20);
-				}
-
-				drawGroupIdx = m_activeDrawGroups++;
-				m_drawGroups[drawGroupIdx].dxMeshId = meshRenderer.meshID;
-			}
-
-			m_drawGroups[drawGroupIdx].entities.emplace_back(entity);
+			m_drawGroups[0].entities.emplace_back(entity);
 		}
 
 
 		// Upload ObjectDatas
-		D3D12_GPU_VIRTUAL_ADDRESS drawGroupObjectDatasVA = m_ringBuffer.getCurrentGPUAddress();
-
 		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
 		{
 			DrawGroup& drawGroup = m_drawGroups[i];
 
-			for (entt::entity entity : drawGroup.entities)
-			{
-				auto [meshRenderer, transform] = meshRendererView[entity];
+			GPUObjectData* pObjectDatas = (GPUObjectData*)m_ringBuffer.getMappedPtr();
+			uint32_t* pObjDataIndicies = (uint32_t*)(pObjectDatas + drawGroup.entities.size());
 
-				GPUObjectData* pObjectData = (GPUObjectData*)m_ringBuffer.getMappedPtr();
+			uint32_t numVertices = 0;
+			drawGroup.numIndicies = 0;
+
+			for (uint32_t k = 0; k < (uint32_t)drawGroup.entities.size(); k++)
+			{
+				auto [meshRenderer, transform] = meshRendererView[drawGroup.entities[k]];
+
+				GPUObjectData* pObjectData = pObjectDatas + k;
 				pObjectData->objectMatrix = glm::transpose(transform.getMatrix());
 				pObjectData->diffuseTextureIdx = meshRenderer.diffuseTextureID;
 				pObjectData->normalMapIdx = meshRenderer.normalMapID;
 
-				m_ringBuffer.offsetMappedPtr(sizeof(GPUObjectData));
+				const DXMesh& dxMesh = m_dxMeshes[meshRenderer.meshID];
+				for (uint32_t j = 0; j < dxMesh.numVerticies; j++)
+				{
+					*(pObjDataIndicies + j) = k;
+				}
+
+				pObjDataIndicies += dxMesh.numVerticies;
+
+				drawGroup.numIndicies += (uint32_t)dxMesh.indices.size();
+				numVertices += dxMesh.numVerticies;
 			}
 
-			drawGroup.objectDatasVA = drawGroupObjectDatasVA;
-			drawGroupObjectDatasVA += drawGroup.entities.size() * sizeof(GPUObjectData);
+			drawGroup.objectDatasVA = m_ringBuffer.getCurrentGPUAddress();
+			m_ringBuffer.offsetMappedPtr(drawGroup.entities.size() * sizeof(GPUObjectData));
+
+			drawGroup.batchedObjectDataIndicies = m_ringBuffer.getCurrentGPUAddress();
+			m_ringBuffer.offsetMappedPtr(numVertices * sizeof(uint32_t));
 		}
 
+
+
+		// GPU copy vertex & index data from meshes into batched verticies & indicies dxResources
+
+		static std::vector<uint32_t> s_indices;
+
+
+		m_batchedVertices.resourceOffset = 0;
+		m_batchedIndices.resourceOffset = 0;
+
+		m_commandContext.transitionResource(m_batchedIndices.pDXResource, D3D12_RESOURCE_STATE_INDEX_BUFFER, D3D12_RESOURCE_STATE_COPY_DEST);
+
+		ID3D12GraphicsCommandList* pCommandList = m_commandContext.getCommandList();
+		for (uint32_t i = 0; i < m_activeDrawGroups; i++)
+		{
+			s_indices.clear();
+
+			DrawGroup& drawGroup = m_drawGroups[i];
+
+			drawGroup.verticiesGVA = m_batchedVertices.pDXResource->GetGPUVirtualAddress() + m_batchedVertices.resourceOffset;
+
+			for (uint32_t k = 0; k < (uint32_t)drawGroup.entities.size(); k++)
+			{
+				const MeshRenderer& meshRenderer = meshRendererView.get<MeshRenderer>(drawGroup.entities[k]);
+
+				const Allocation& verticesAlloc = m_dxMeshes[meshRenderer.meshID].verticiesAlloc;
+				uint64_t verticiesBytes = verticesAlloc.elementSize * verticesAlloc.numElements;
+
+				pCommandList->CopyBufferRegion(m_batchedVertices.pDXResource, m_batchedVertices.resourceOffset, verticesAlloc.pDXResource, verticesAlloc.resourceOffset, verticiesBytes);
+
+				m_batchedVertices.resourceOffset += verticiesBytes;
+				OKAY_ASSERT(m_batchedVertices.resourceOffset <= m_batchedVertices.elementSize);
+			}
+
+
+			drawGroup.indiciesView.BufferLocation = m_batchedIndices.pDXResource->GetGPUVirtualAddress() + m_batchedIndices.resourceOffset;
+			drawGroup.indiciesView.SizeInBytes = drawGroup.numIndicies * sizeof(uint32_t);
+			drawGroup.indiciesView.Format = DXGI_FORMAT_R32_UINT;
+
+			uint32_t indexOffset = 0;
+			for (uint32_t k = 0; k < (uint32_t)drawGroup.entities.size(); k++)
+			{
+				const MeshRenderer& meshRenderer = meshRendererView.get<MeshRenderer>(drawGroup.entities[k]);
+
+				const DXMesh& dxMesh = m_dxMeshes[meshRenderer.meshID];
+				const Allocation& indiciesAlloc = dxMesh.indiciesAlloc;
+				uint64_t indiciesBytes = indiciesAlloc.elementSize * indiciesAlloc.numElements;
+
+				for (uint32_t j = 0; j < (uint32_t)dxMesh.indices.size(); j++)
+				{
+					s_indices.emplace_back(indexOffset + dxMesh.indices[j]);
+				}
+
+				indexOffset += (uint32_t)dxMesh.numVerticies;
+			}
+
+			uint32_t indicesByteSize = s_indices.size() * sizeof(uint32_t);
+
+			memcpy(m_ringBuffer.getMappedPtr(), s_indices.data(), indicesByteSize);
+			pCommandList->CopyBufferRegion(m_batchedIndices.pDXResource, m_batchedIndices.resourceOffset,  m_ringBuffer.getDXResource(), m_ringBuffer.getOffset(), indicesByteSize);
+
+			m_ringBuffer.offsetMappedPtr(indicesByteSize);
+
+			m_batchedIndices.resourceOffset += indicesByteSize;
+			OKAY_ASSERT(m_batchedIndices.resourceOffset <= m_batchedIndices.elementSize);
+		}
+		
 		m_ringBuffer.alignOffset();
+
+		m_commandContext.transitionResource(m_batchedIndices.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
 	}
 
 	void Renderer::createDevice(IDXGIFactory* pFactory)
@@ -326,7 +402,7 @@ namespace Okay
 		swapChainDesc.Scaling = DXGI_SCALING_STRETCH;
 		swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 		swapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-		swapChainDesc.Flags = 0;
+		swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
 		DX_CHECK(pFactory2->CreateSwapChainForHwnd(m_commandContext.getCommandQueue(), window.getHWND(), &swapChainDesc, nullptr, nullptr, &m_pSwapChain));
 
@@ -388,8 +464,9 @@ namespace Okay
 		// Main Render Pass
 
 		rootParams.emplace_back(createRootParamCBV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Main Render Data (GPURenderData)
-		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Verticies SRV
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 0, 0)); // Verticies SRV (Vertex)
 		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 1, 0)); // Object datas (GPUObjcetData)
+		rootParams.emplace_back(createRootParamSRV(D3D12_SHADER_VISIBILITY_ALL, 8, 0)); // Batched objData indicies (uint32_t)
 
 		// At this point we don't know the real number of textures, so just setting a high upper limit
 		D3D12_DESCRIPTOR_RANGE textureDescriptorRanges[3] =
@@ -446,19 +523,22 @@ namespace Okay
 
 		for (uint32_t i = 0; i < (uint32_t)meshes.size(); i++)
 		{
+			DXMesh& dxMesh = m_dxMeshes[i];
+
 			const std::vector<Vertex>& verticies = meshes[i].getMeshData().verticies;
 			const std::vector<uint32_t>& indicies = meshes[i].getMeshData().indicies;
 
-			Allocation verticiesAlloc = m_gpuResourceManager.allocateInto(verticiesR, OKAY_RESOURCE_APPEND, sizeof(Vertex), (uint32_t)verticies.size(), verticies.data());
-			Allocation indiciesAlloc = m_gpuResourceManager.allocateInto(indiciesR, OKAY_RESOURCE_APPEND, sizeof(uint32_t), (uint32_t)indicies.size(), indicies.data());
+			dxMesh.verticiesAlloc = m_gpuResourceManager.allocateInto(verticiesR, OKAY_RESOURCE_APPEND, sizeof(Vertex), (uint32_t)verticies.size(), verticies.data());
+			dxMesh.indiciesAlloc = m_gpuResourceManager.allocateInto(indiciesR, OKAY_RESOURCE_APPEND, sizeof(uint32_t), (uint32_t)indicies.size(), indicies.data());
 
-			m_dxMeshes[i].gpuVerticiesGVA = m_gpuResourceManager.getVirtualAddress(verticiesAlloc);
+			dxMesh.gpuVerticiesGVA = m_gpuResourceManager.getVirtualAddress(dxMesh.verticiesAlloc);
 
-			m_dxMeshes[i].indiciesView.BufferLocation = m_gpuResourceManager.getVirtualAddress(indiciesAlloc);
-			m_dxMeshes[i].indiciesView.SizeInBytes = (uint32_t)indiciesAlloc.elementSize * indiciesAlloc.numElements;
-			m_dxMeshes[i].indiciesView.Format = DXGI_FORMAT_R32_UINT;
+			dxMesh.indiciesView.BufferLocation = m_gpuResourceManager.getVirtualAddress(dxMesh.indiciesAlloc);
+			dxMesh.indiciesView.SizeInBytes = (uint32_t)(dxMesh.indiciesAlloc.elementSize * dxMesh.indiciesAlloc.numElements);
+			dxMesh.indiciesView.Format = DXGI_FORMAT_R32_UINT;
 
-			m_dxMeshes[i].numIndicies = (uint32_t)indicies.size();
+			dxMesh.indices = indicies;
+			dxMesh.numVerticies = (uint32_t)verticies.size();
 		}
 
 		m_commandContext.transitionResource(indiciesR.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);

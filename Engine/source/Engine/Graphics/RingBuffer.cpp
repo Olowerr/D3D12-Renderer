@@ -128,5 +128,7 @@ namespace Okay
 
 		m_bufferOffset = 0;
 		m_maxSize = size;
+
+		m_pRingBuffer->SetName(L"RingBuffer");
 	}
 }

@@ -32,15 +32,16 @@ cbuffer RenderDataCBuffer : register(b0, space0)
 // Structured Buffers
 StructuredBuffer<InputVertex> verticies : register(t0, space0);
 StructuredBuffer<ObjectData> objectDatas : register(t1, space0);
+StructuredBuffer<uint> batchedObjDataIndicies : register(t2, space0);
 
 
 // --- Functions
 
-float3 main(uint vertexId : SV_VERTEXID, uint instanceID : SV_INSTANCEID) : WORLD_POS
+float3 main(uint vertexId : SV_VERTEXID) : WORLD_POS
 {
     InputVertex inputVertex = verticies[vertexId];
-    float4x4 worldMatrix = objectDatas[instanceID].objectMatrix;
-	
+    float4x4 worldMatrix = objectDatas[batchedObjDataIndicies[vertexId]].objectMatrix;
+
     float3 worldPosition = mul(float4(inputVertex.position, 1.f), worldMatrix).xyz;
     return worldPosition;
 }

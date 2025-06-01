@@ -72,17 +72,27 @@ namespace Okay
 
 		D3D12_GPU_VIRTUAL_ADDRESS gpuVerticiesGVA = {};
 		D3D12_INDEX_BUFFER_VIEW indiciesView = {};
-		uint32_t numIndicies = INVALID_UINT32;
+
+		std::vector<uint32_t> indices;
+		uint32_t numVerticies = INVALID_UINT32;
+
+		Allocation verticiesAlloc = {};
+		Allocation indiciesAlloc = {};
 	};
 
 	struct DrawGroup
 	{
 		DrawGroup() = default;
 
-		uint32_t dxMeshId = INVALID_UINT32;
 		std::vector<entt::entity> entities;
 
+		D3D12_GPU_VIRTUAL_ADDRESS verticiesGVA = {};
+		D3D12_INDEX_BUFFER_VIEW indiciesView = {};
+
+		uint32_t numIndicies = INVALID_UINT32;
+
 		D3D12_GPU_VIRTUAL_ADDRESS objectDatasVA = INVALID_UINT64;
+		D3D12_GPU_VIRTUAL_ADDRESS batchedObjectDataIndicies = INVALID_UINT64;
 	};
 
 	struct ShadowMap
