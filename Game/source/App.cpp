@@ -8,6 +8,8 @@ App::App(std::string_view windowTitle, uint32_t windowWidth, uint32_t windowHeig
 	:Application(windowTitle, windowWidth, windowHeight)
 {
 	createEntitesFromFile(FilePath("resources") / "sponza" / "sponza.obj", 1.f);
+	//createEntitesFromFile(FilePath("resources") / "meshes" / "sphere.fbx", 1.f);
+	//m_resourceManager.loadTexture(FilePath("resources") / "textures" / "sus.PNG");
 
 	m_camEntity = m_scene.createEntity();
 	m_camEntity.addComponent<Camera>();

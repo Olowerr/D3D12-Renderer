@@ -2,8 +2,6 @@
 
 namespace Okay
 {
-	static D3D12_RESOURCE_BARRIER s_shadowMapBarriers[LightHandler::MAX_SHADOW_MAPS + LightHandler::MAX_POINT_SHADOW_CUBES] = {};
-
 	struct GPUShadowMapCubeData
 	{
 		glm::mat4 matrices[6] = {};
@@ -49,12 +47,29 @@ namespace Okay
 		float spreadCosAngle = 90.f;
 	};
 
-	void LightHandler::initiate(ID3D12Device* pDevice, GPUResourceManager& gpuResourceManager, CommandContext& commandContext, const std::vector<DXMesh>& dxMeshes)
+	void LightHandler::initiate(ID3D12Device* pDevice, uint32_t maxFramesInFlight, GPUResourceManager& gpuResourceManager, const std::vector<DXMesh>& dxMeshes, DescriptorHeapStore& descHeapStore)
 	{
 		m_pDevice = pDevice;
 		m_pGpuResourceManager = &gpuResourceManager;
-		m_pCommandContext = &commandContext;
 		m_pDxMeshes = &dxMeshes;
+		m_pDescriptorHeapStore = &descHeapStore;
+
+		m_shadowMapsDHH = descHeapStore.createDescriptorHeap(maxFramesInFlight * (MAX_SHADOW_MAPS + MAX_POINT_SHADOW_CUBES), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, false);
+
+		m_maxFramesInFlight = maxFramesInFlight;
+		m_currentFrame = maxFramesInFlight - 1;
+		m_frames.resize(maxFramesInFlight);
+		for (uint32_t i = 0; i < (uint32_t)m_frames.size(); i++)
+		{
+			FrameResources& frame = m_frames[i];
+
+			frame.shadowMapPool.list.reserve(MAX_SHADOW_MAPS);
+			frame.shadowMapCubePool.list.reserve(MAX_POINT_SHADOW_CUBES);
+
+			frame.shadowMapDescriptorsOffset = i * (MAX_SHADOW_MAPS + MAX_POINT_SHADOW_CUBES);
+		}
+
+		m_srvIncrementSize = m_pDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
 		createRenderPasses();
 	}
@@ -65,15 +80,10 @@ namespace Okay
 		m_shadowPassPointLights.shutdown();
 	}
 	
-	void LightHandler::setShadowMapDescritprHeap(DescriptorHeapStore& store, DescriptorHeapHandle shadowMapHandle, uint32_t offset)
+	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writePointLightGPUData(RingBuffer& ringBuffer, CommandContext& commandContext, const Scene& scene, uint32_t* pOutNumPointLights)
 	{
-		m_pDescriptorHeapStore = &store;
-		m_shadowMapDHH = shadowMapHandle;
-		m_shadowDescriptorsOffset = offset;
-	}
-	
-	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writePointLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumPointLights)
-	{
+		FrameResources& frame = m_frames[m_currentFrame];
+
 		D3D12_GPU_VIRTUAL_ADDRESS gpuPointLightsGVA = ringBuffer.getCurrentGPUAddress();
 
 		static const glm::vec3 CUBE_MAP_DIRECTIONS[6] =
@@ -130,15 +140,17 @@ namespace Okay
 				viewProjMatrices[i] = glm::transpose(projMatrix * glm::lookAt(transform.position, transform.position + CUBE_MAP_DIRECTIONS[i], upVector));
 			}
 
-			trySetShadowMapData(m_shadowMapCubePool, true, viewProjMatrices, transform.position, &pGpuPointLight->shadowMapIdx);
+			trySetShadowMapData(commandContext, frame.shadowMapCubePool, true, viewProjMatrices, transform.position, &pGpuPointLight->shadowMapIdx);
 		}
 
 		ringBuffer.alignOffset();
 		return gpuPointLightsGVA;
 	}
 	
-	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writeDirLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumDirLights)
+	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writeDirLightGPUData(RingBuffer& ringBuffer, CommandContext& commandContext, const Scene& scene, uint32_t* pOutNumDirLights)
 	{
+		FrameResources& frame = m_frames[m_currentFrame];
+
 		D3D12_GPU_VIRTUAL_ADDRESS gpuDirLightsGVA = ringBuffer.getCurrentGPUAddress();
 
 		auto dirLightView = scene.getRegistry().view<DirectionalLight, Transform>();
@@ -182,7 +194,7 @@ namespace Okay
 				glm::lookAtLH(lightOrigin, lightFocus, glm::vec3(0.f, 1.f, 0.f)));
 
 			// light pos not used for directional lights
-			trySetShadowMapData(m_shadowMapPool, false, &pGpuDirLight->viewProjMatrix, glm::vec3(0.f), &pGpuDirLight->shadowMapIdx);
+			trySetShadowMapData(commandContext, frame.shadowMapPool, false, &pGpuDirLight->viewProjMatrix, glm::vec3(0.f), &pGpuDirLight->shadowMapIdx);
 
 			/*
 				Shadow map improvement techniques
@@ -200,8 +212,10 @@ namespace Okay
 		return gpuDirLightsGVA;
 	}
 	
-	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writeSpotLightGPUData(const Scene& scene, RingBuffer& ringBuffer, uint32_t* pOutNumSpotLights)
+	D3D12_GPU_VIRTUAL_ADDRESS LightHandler::writeSpotLightGPUData(RingBuffer& ringBuffer, CommandContext& commandContext, const Scene& scene, uint32_t* pOutNumSpotLights)
 	{
+		FrameResources& frame = m_frames[m_currentFrame];
+
 		D3D12_GPU_VIRTUAL_ADDRESS gpuSpotLightsGVA = ringBuffer.getCurrentGPUAddress();
 
 		auto spotLightView = scene.getRegistry().view<SpotLight, Transform>();
@@ -227,52 +241,56 @@ namespace Okay
 				transform.getViewMatrix());
 
 			// light pos not used for spot lights
-			trySetShadowMapData(m_shadowMapPool, false, &pGpuSpotLight->viewProjMatrix, glm::vec3(0.f), &pGpuSpotLight->shadowMapIdx);
+			trySetShadowMapData(commandContext, frame.shadowMapPool, false, &pGpuSpotLight->viewProjMatrix, glm::vec3(0.f), &pGpuSpotLight->shadowMapIdx);
 		}
 
 		ringBuffer.alignOffset();
 		return gpuSpotLightsGVA;
 	}
 	
-	void LightHandler::preDepthMapRender()
+	void LightHandler::preDepthMapRender(CommandContext& commandContext)
 	{
-		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
+		FrameResources& frame = m_frames[m_currentFrame];
 
-		for (uint32_t i = 0; i < m_shadowMapPool.m_numActive; i++)
+		ID3D12GraphicsCommandList* pCommandList = commandContext.getCommandList();
+
+		for (uint32_t i = 0; i < frame.shadowMapPool.numActive; i++)
 		{
-			s_shadowMapBarriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			s_shadowMapBarriers[i].Transition.pResource = m_shadowMapPool[i].textureAllocation.pDXResource;
-			s_shadowMapBarriers[i].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-			s_shadowMapBarriers[i].Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-			s_shadowMapBarriers[i].Transition.Subresource = 0;
-			s_shadowMapBarriers[i].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+			frame.shadowMapBarriers[i].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			frame.shadowMapBarriers[i].Transition.pResource = frame.shadowMapPool[i].textureAllocation.pDXResource;
+			frame.shadowMapBarriers[i].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+			frame.shadowMapBarriers[i].Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+			frame.shadowMapBarriers[i].Transition.Subresource = 0;
+			frame.shadowMapBarriers[i].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 		}
-		for (uint32_t i = 0; i < m_shadowMapCubePool.m_numActive; i++)
+		for (uint32_t i = 0; i < frame.shadowMapCubePool.numActive; i++)
 		{
-			uint32_t barrierIdx = i + m_shadowMapPool.m_numActive;
-			s_shadowMapBarriers[barrierIdx].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-			s_shadowMapBarriers[barrierIdx].Transition.pResource = m_shadowMapCubePool[i].textureAllocation.pDXResource;
-			s_shadowMapBarriers[barrierIdx].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-			s_shadowMapBarriers[barrierIdx].Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-			s_shadowMapBarriers[barrierIdx].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-			s_shadowMapBarriers[barrierIdx].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+			uint32_t barrierIdx = i + frame.shadowMapPool.numActive;
+			frame.shadowMapBarriers[barrierIdx].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			frame.shadowMapBarriers[barrierIdx].Transition.pResource = frame.shadowMapCubePool[i].textureAllocation.pDXResource;
+			frame.shadowMapBarriers[barrierIdx].Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+			frame.shadowMapBarriers[barrierIdx].Transition.StateAfter = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+			frame.shadowMapBarriers[barrierIdx].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+			frame.shadowMapBarriers[barrierIdx].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 		}
 
-		pCommandList->ResourceBarrier(m_shadowMapPool.m_numActive + m_shadowMapCubePool.m_numActive, s_shadowMapBarriers);
+		pCommandList->ResourceBarrier(frame.shadowMapPool.numActive + frame.shadowMapCubePool.numActive, frame.shadowMapBarriers);
 
-		for (uint32_t i = 0; i < m_shadowMapPool.m_numActive; i++)
+		for (uint32_t i = 0; i < frame.shadowMapPool.numActive; i++)
 		{
-			pCommandList->ClearDepthStencilView(m_shadowMapPool[i].dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+			pCommandList->ClearDepthStencilView(frame.shadowMapPool[i].dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 		}
-		for (uint32_t i = 0; i < m_shadowMapCubePool.m_numActive; i++)
+		for (uint32_t i = 0; i < frame.shadowMapCubePool.numActive; i++)
 		{
-			pCommandList->ClearDepthStencilView(m_shadowMapCubePool[i].dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+			pCommandList->ClearDepthStencilView(frame.shadowMapCubePool[i].dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 		}
 	}
 
-	void LightHandler::drawDepthMap_Internal(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, const ShadowMap& shadowMap, uint32_t shadowBarrierIdx)
+	void LightHandler::drawDepthMap_Internal(CommandContext& commandContext, const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, const ShadowMap& shadowMap, uint32_t shadowBarrierIdx)
 	{
-		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
+		FrameResources& frame = m_frames[m_currentFrame];
+
+		ID3D12GraphicsCommandList* pCommandList = commandContext.getCommandList();
 
 		for (uint32_t i = 0; i < numActiveDrawGroups; i++)
 		{
@@ -288,38 +306,40 @@ namespace Okay
 			pCommandList->DrawIndexedInstanced(dxMesh.numIndicies, (uint32_t)drawGroup.entities.size(), 0, 0, 0);
 		}
 
-		s_shadowMapBarriers[shadowBarrierIdx].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-		s_shadowMapBarriers[shadowBarrierIdx].Transition.pResource = shadowMap.textureAllocation.pDXResource;
-		s_shadowMapBarriers[shadowBarrierIdx].Transition.StateBefore = D3D12_RESOURCE_STATE_DEPTH_WRITE;
-		s_shadowMapBarriers[shadowBarrierIdx].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-		s_shadowMapBarriers[shadowBarrierIdx].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-		s_shadowMapBarriers[shadowBarrierIdx].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+		frame.shadowMapBarriers[shadowBarrierIdx].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+		frame.shadowMapBarriers[shadowBarrierIdx].Transition.pResource = shadowMap.textureAllocation.pDXResource;
+		frame.shadowMapBarriers[shadowBarrierIdx].Transition.StateBefore = D3D12_RESOURCE_STATE_DEPTH_WRITE;
+		frame.shadowMapBarriers[shadowBarrierIdx].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+		frame.shadowMapBarriers[shadowBarrierIdx].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		frame.shadowMapBarriers[shadowBarrierIdx].Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 	}
 
-	void LightHandler::drawDepthMaps(const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups, RingBuffer& ringBuffer)
+	void LightHandler::drawDepthMaps(CommandContext& commandContext, RingBuffer& ringBuffer, const std::vector<DrawGroup>& drawGroups, uint32_t numActiveDrawGroups)
 	{
-		preDepthMapRender();
+		FrameResources& frame = m_frames[m_currentFrame];
 
-		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
+		preDepthMapRender(commandContext);
+
+		ID3D12GraphicsCommandList* pCommandList = commandContext.getCommandList();
 		m_shadowPass.bindBase(pCommandList);
 
-		for (uint32_t i = 0; i < m_shadowMapPool.m_numActive; i++)
+		for (uint32_t i = 0; i < frame.shadowMapPool.numActive; i++)
 		{
-			const ShadowMap& shadowMap = m_shadowMapPool[i];
+			const ShadowMap& shadowMap = frame.shadowMapPool[i];
 
 			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = ringBuffer.allocateMapped(shadowMap.viewProjMatrices, sizeof(glm::mat4));
 			pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
 
 			m_shadowPass.bindRTVs(pCommandList, 0, nullptr, &shadowMap.dsvHandle, 1);
-			drawDepthMap_Internal(drawGroups, numActiveDrawGroups, shadowMap, i);
+			drawDepthMap_Internal(commandContext, drawGroups, numActiveDrawGroups, shadowMap, i);
 		}
 
 
 		m_shadowPassPointLights.bindBase(pCommandList);
 
-		for (uint32_t i = 0; i < m_shadowMapCubePool.m_numActive; i++)
+		for (uint32_t i = 0; i < frame.shadowMapCubePool.numActive; i++)
 		{
-			const ShadowMap& shadowMapCube = m_shadowMapCubePool[i];
+			const ShadowMap& shadowMapCube = frame.shadowMapCubePool[i];
 
 			D3D12_GPU_VIRTUAL_ADDRESS lightCamBuffer = ringBuffer.getCurrentGPUAddress();
 
@@ -331,54 +351,71 @@ namespace Okay
 			pCommandList->SetGraphicsRootConstantBufferView(0, lightCamBuffer);
 
 			m_shadowPassPointLights.bindRTVs(pCommandList, 0, nullptr, &shadowMapCube.dsvHandle, 6);
-			drawDepthMap_Internal(drawGroups, numActiveDrawGroups, shadowMapCube, i + m_shadowMapPool.m_numActive);
+			drawDepthMap_Internal(commandContext, drawGroups, numActiveDrawGroups, shadowMapCube, i + frame.shadowMapPool.numActive);
 		}
 
-		pCommandList->ResourceBarrier(m_shadowMapPool.m_numActive + m_shadowMapCubePool.m_numActive, s_shadowMapBarriers);
+		pCommandList->ResourceBarrier(frame.shadowMapPool.numActive + frame.shadowMapCubePool.numActive, frame.shadowMapBarriers);
+	}
+
+	D3D12_CPU_DESCRIPTOR_HANDLE LightHandler::getFrameShadowMapSRVCPUHandle()
+	{
+		FrameResources& frame = m_frames[m_currentFrame];
+		ID3D12DescriptorHeap* pDXDescriptorHeap = m_pDescriptorHeapStore->getDXDescriptorHeap(m_shadowMapsDHH);
+
+		D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = pDXDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+		cpuHandle.ptr += (uint64_t)frame.shadowMapDescriptorsOffset * m_srvIncrementSize;
+
+		return cpuHandle;
 	}
 
 	void LightHandler::newFrame()
 	{
-		m_shadowMapPool.m_numActive = 0;
-		m_shadowMapCubePool.m_numActive = 0;
+		m_currentFrame = (m_currentFrame + 1) % m_maxFramesInFlight;
+
+		m_frames[m_currentFrame].shadowMapPool.numActive = 0;
+		m_frames[m_currentFrame].shadowMapCubePool.numActive = 0;
 	}
 
-	template<uint32_t containerSize>
-	void LightHandler::trySetShadowMapData(StaticContainer<ShadowMap, containerSize>& container, bool isCubeMap, glm::mat4* pViewProjMatrices, glm::vec3 lightPos, uint32_t* pOutShadowMapIdx)
+	void LightHandler::trySetShadowMapData(CommandContext& commandContext, ActiveVector<ShadowMap>& shadowMaps, bool isCubeMap, glm::mat4* pViewProjMatrices, glm::vec3 lightPos, uint32_t* pOutShadowMapIdx)
 	{
-		if (container.m_numActive >= container.getMaxSize())
+		if (shadowMaps.numActive >= shadowMaps.list.capacity())
 		{
 			*pOutShadowMapIdx = INVALID_UINT32;
 			return;
 		}
 
 		ShadowMap* pShadowMap = nullptr;
-		if (container.m_numActive >= container.getSize())
+		if (shadowMaps.numActive >= shadowMaps.list.size())
 		{
-			pShadowMap = &createShadowMap(container, isCubeMap, SHADOW_MAPS_WIDTH, SHADOW_MAPS_HEIGHT);
+			pShadowMap = &createShadowMap(commandContext, shadowMaps, isCubeMap, SHADOW_MAPS_WIDTH, SHADOW_MAPS_HEIGHT);
 		}
 		else
 		{
-			pShadowMap = &container[container.m_numActive];
+			pShadowMap = &shadowMaps.list[shadowMaps.numActive];
 		}
 
 		pShadowMap->lightPos = lightPos;
 		memcpy(pShadowMap->viewProjMatrices, pViewProjMatrices, sizeof(pShadowMap->viewProjMatrices));
 
-		*pOutShadowMapIdx = container.m_numActive++;
+		*pOutShadowMapIdx = shadowMaps.numActive++;
 	}
-
-	template<uint32_t containerSize>
-	ShadowMap& LightHandler::createShadowMap(StaticContainer<ShadowMap, containerSize>& container, bool isCubeMap, uint32_t width, uint32_t height)
+	
+	ShadowMap& LightHandler::createShadowMap(CommandContext& commandContext, ActiveVector<ShadowMap>& shadowMaps, bool isCubeMap, uint32_t width, uint32_t height)
 	{
-		ShadowMap& shadowMap = container.emplace();
+		FrameResources& frame = m_frames[m_currentFrame];
 
-		uint32_t arraySize = isCubeMap ? 6 : 1;
-		shadowMap.textureAllocation = m_pGpuResourceManager->createTexture(width, height, 1, arraySize, DXGI_FORMAT_R32_TYPELESS,
-			OKAY_TEXTURE_FLAG_DEPTH | OKAY_TEXTURE_FLAG_SHADER_READ, nullptr);
+		ShadowMap& shadowMap = shadowMaps.list.emplace_back();
 
+		TextureDescription shadowMapDesc = {};
+		shadowMapDesc.width = width;
+		shadowMapDesc.height = height;
+		shadowMapDesc.mipLevels = 1;
+		shadowMapDesc.arraySize = isCubeMap ? 6 : 1;
+		shadowMapDesc.format = DXGI_FORMAT_R32_TYPELESS;
+		shadowMapDesc.flags = OKAY_TEXTURE_FLAG_DEPTH | OKAY_TEXTURE_FLAG_SHADER_READ;
+
+		shadowMap.textureAllocation = m_pGpuResourceManager->createTexture(shadowMapDesc, nullptr, nullptr);
 		ID3D12Resource* pDXTexture = shadowMap.textureAllocation.pDXResource;
-
 
 		DescriptorDesc srvDesc = {};
 		srvDesc.type = OKAY_DESCRIPTOR_TYPE_SRV;
@@ -416,12 +453,12 @@ namespace Okay
 			dsvDesc.dsvDesc.Texture2D.MipSlice = 0;
 		}
 
-		uint32_t srvDescriptorOffset = isCubeMap ? MAX_SHADOW_MAPS : 0;
-		shadowMap.srvHandle = m_pDescriptorHeapStore->allocateDescriptors(m_shadowMapDHH, srvDescriptorOffset + container.getSize() - 1, &srvDesc, 1).gpuHandle;
+		uint32_t srvDescriptorOffset = frame.shadowMapDescriptorsOffset + (isCubeMap ? MAX_SHADOW_MAPS : 0);
+		shadowMap.srvHandle = m_pDescriptorHeapStore->allocateDescriptors(m_shadowMapsDHH, srvDescriptorOffset + (uint32_t)shadowMaps.list.size() - 1, &srvDesc, 1).gpuHandle;
 
 		shadowMap.dsvHandle = m_pDescriptorHeapStore->allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, &dsvDesc, 1).cpuHandle;
 
-		m_pCommandContext->transitionResource(pDXTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		commandContext.transitionResource(pDXTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		return shadowMap;
 	}
 

@@ -2,17 +2,14 @@
 
 namespace Okay
 {
-	void CommandContext::initialize(ID3D12Device* pDevice, D3D12_COMMAND_LIST_TYPE type)
+	void CommandContext::initialize(ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue)
 	{
-		D3D12_COMMAND_QUEUE_DESC queueDesc{};
-		queueDesc.Type = type;
-		queueDesc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
-		queueDesc.NodeMask = 0;
-		queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+		m_pCommandQueue = pCommandQueue;
 
-		DX_CHECK(pDevice->CreateCommandAllocator(type, IID_PPV_ARGS(&m_pCommandAllocator)));
-		DX_CHECK(pDevice->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_pCommandQueue)));
-		DX_CHECK(pDevice->CreateCommandList(0, type, m_pCommandAllocator, nullptr, IID_PPV_ARGS(&m_pCommandList)));
+		D3D12_COMMAND_QUEUE_DESC desc = pCommandQueue->GetDesc();
+
+		DX_CHECK(pDevice->CreateCommandAllocator(desc.Type, IID_PPV_ARGS(&m_pCommandAllocator)));
+		DX_CHECK(pDevice->CreateCommandList(0, desc.Type, m_pCommandAllocator, nullptr, IID_PPV_ARGS(&m_pCommandList)));
 
 		DX_CHECK(pDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_pFence)));
 		m_fenceValue = 0;
@@ -21,7 +18,6 @@ namespace Okay
 	void CommandContext::shutdown()
 	{
 		D3D12_RELEASE(m_pCommandList);
-		D3D12_RELEASE(m_pCommandQueue);
 		D3D12_RELEASE(m_pCommandAllocator);
 		D3D12_RELEASE(m_pFence);
 	}
@@ -31,16 +27,18 @@ namespace Okay
 		return m_pCommandList;
 	}
 
-	ID3D12CommandQueue* CommandContext::getCommandQueue()
-	{
-		return m_pCommandQueue;
-	}
-
 	void CommandContext::flush()
 	{
 		execute();
+		signal();
 		wait();
 		reset();
+	}
+
+	void CommandContext::signal()
+	{
+		m_fenceValue++;
+		DX_CHECK(m_pCommandQueue->Signal(m_pFence, m_fenceValue));
 	}
 
 	void CommandContext::execute()
@@ -51,9 +49,6 @@ namespace Okay
 
 	void CommandContext::wait()
 	{
-		m_fenceValue++;
-		DX_CHECK(m_pCommandQueue->Signal(m_pFence, m_fenceValue));
-
 		if (m_pFence->GetCompletedValue() == m_fenceValue)
 			return;
 

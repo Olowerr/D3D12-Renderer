@@ -4,8 +4,9 @@
 #include "Engine/Scene/Scene.h"
 #include "RenderPass.h"
 #include "RingBuffer.h"
-#include "Engine/Misc/StaticContainer.h"
 #include "Handlers/LightHandler.h"
+
+#include <array>
 
 namespace Okay
 {
@@ -16,8 +17,28 @@ namespace Okay
 	class Renderer
 	{
 	public:
-		static const uint8_t NUM_BACKBUFFERS = 2;
+		static const uint8_t MAX_FRAMES_IN_FLIGHT = 3;
 		static const uint8_t MAX_MIP_LEVELS = 16;
+
+		struct FrameResources
+		{
+			CommandContext commandContext;
+
+			// Draw
+			ID3D12Resource* backBuffer = nullptr;
+			D3D12_GPU_VIRTUAL_ADDRESS renderDataGVA = INVALID_UINT64;
+			D3D12_CPU_DESCRIPTOR_HANDLE dsvCpuHandle;
+
+			// Technically doesn't need 1 per frame but it's okay for now :3
+			RingBuffer ringBuffer;
+
+			// Use ActiveVector cuz we don't wanna call the desctructors of DrawGroup cuz they deallocate the vectors inside them
+			ActiveVector<DrawGroup> drawGroups;
+
+			D3D12_GPU_VIRTUAL_ADDRESS pointLightsGVA = INVALID_UINT64;
+			D3D12_GPU_VIRTUAL_ADDRESS directionalLightsGVA = INVALID_UINT64;
+			D3D12_GPU_VIRTUAL_ADDRESS spotLightsGVA = INVALID_UINT64;
+		};
 
 	public:
 		Renderer() = default;
@@ -34,7 +55,6 @@ namespace Okay
 		void drawDrawGroups(ID3D12GraphicsCommandList* pCommandList);
 
 	private:
-
 		void updateBuffers(const Scene& scene);
 		void preRender(D3D12_CPU_DESCRIPTOR_HANDLE* pOutCurrentBB);
 		void renderScene(const Scene& scene, D3D12_CPU_DESCRIPTOR_HANDLE currentMainRtv);
@@ -43,6 +63,7 @@ namespace Okay
 		void assignObjectDrawGroups(const Scene& scene);
 
 		void createDevice(IDXGIFactory* pFactory);
+		void createCommandQueue();
 
 		void createSwapChain(IDXGIFactory* pFactory, const Window& window);
 		void fetchBackBuffersAndDSV();
@@ -58,40 +79,29 @@ namespace Okay
 	private: // Main
 		ID3D12Device* m_pDevice = nullptr;
 		IDXGISwapChain1* m_pSwapChain = nullptr;
+		ID3D12CommandQueue* m_pCommandQueue = nullptr;
 
-		ID3D12Resource* m_backBuffers[NUM_BACKBUFFERS] = {};
-		uint8_t m_currentBackBuffer = NUM_BACKBUFFERS - 1;
+		uint8_t m_currentBackBuffer = MAX_FRAMES_IN_FLIGHT - 1;
 		D3D12_CPU_DESCRIPTOR_HANDLE m_rtvBackBufferCPUHandle;
-		D3D12_CPU_DESCRIPTOR_HANDLE m_mainDsvCpuHandle;
 
 		D3D12_VIEWPORT m_viewport = {};
 		D3D12_RECT m_scissorRect = {};
 
+		FrameResources m_frames[MAX_FRAMES_IN_FLIGHT] = {};
+
 	private: // Abstractions + increment size
-		CommandContext m_commandContext;
 		GPUResourceManager m_gpuResourceManager;
 		DescriptorHeapStore m_descriptorHeapStore;
-		RingBuffer m_ringBuffer;
-
 		LightHandler m_lightHandler;
 
 		uint32_t m_rtvIncrementSize = INVALID_UINT32;
 		uint32_t m_dsvIncrementSize = INVALID_UINT32;
 
 	private: // Draw
-		D3D12_GPU_VIRTUAL_ADDRESS m_renderDataGVA = INVALID_UINT64;
 		DescriptorHeapHandle m_materialTexturesDHH = INVALID_DHH;
 		RenderPass m_mainRenderPass;
 
 		std::vector<DXMesh> m_dxMeshes;
-
-		// Keep track manually because we don't wanna call clear() cuz it deallocates the std::vectors inside the DrawGroups
-		uint32_t m_activeDrawGroups = INVALID_UINT32;
-		std::vector<DrawGroup> m_drawGroups;
-
-		D3D12_GPU_VIRTUAL_ADDRESS m_pointLightsGVA = INVALID_UINT64;
-		D3D12_GPU_VIRTUAL_ADDRESS m_directionalLightsGVA = INVALID_UINT64;
-		D3D12_GPU_VIRTUAL_ADDRESS m_spotLightsGVA = INVALID_UINT64;
 
 	private: // Misc
 		ID3D12DescriptorHeap* m_pImguiDescriptorHeap = nullptr;

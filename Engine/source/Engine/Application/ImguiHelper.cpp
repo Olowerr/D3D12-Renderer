@@ -11,7 +11,7 @@
 
 namespace Okay
 {
-	void imguiInitialize(const Window& window, ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue, ID3D12DescriptorHeap* pImguiDescriptorHeap)
+	void imguiInitialize(const Window& window, ID3D12Device* pDevice, ID3D12CommandQueue* pCommandQueue, ID3D12DescriptorHeap* pImguiDescriptorHeap, uint32_t framesInFlight)
 	{
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
@@ -25,7 +25,7 @@ namespace Okay
 		ImGui_ImplDX12_InitInfo init_info = {};
 		init_info.Device = pDevice;
 		init_info.CommandQueue = pCommandQueue;
-		init_info.NumFramesInFlight = 2; // ImGui assums we have more than 1 framesInFlight, but just lying and saying we have 2 works lmao
+		init_info.NumFramesInFlight = framesInFlight;
 		init_info.RTVFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
 		init_info.DSVFormat = DXGI_FORMAT_UNKNOWN;
 

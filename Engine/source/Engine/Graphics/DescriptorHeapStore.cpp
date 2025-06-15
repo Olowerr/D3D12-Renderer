@@ -18,9 +18,9 @@ namespace Okay
 		m_pDevice = nullptr;
 	}
 
-	DescriptorHeapHandle DescriptorHeapStore::createDescriptorHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type)
+	DescriptorHeapHandle DescriptorHeapStore::createDescriptorHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible)
 	{
-		return createDescriptorHeap_Internal(numDescriptors, type, false);
+		return createDescriptorHeap_Internal(numDescriptors, type, shaderVisible, false);
 	}
 
 	Descriptor DescriptorHeapStore::allocateDescriptors(DescriptorHeapHandle heapHandle, uint32_t slotOffset, const DescriptorDesc* pDescs, uint32_t numDescriptors)
@@ -111,10 +111,10 @@ namespace Okay
 			}
 		}
 
-		return createDescriptorHeap_Internal(std::max(m_committedHeapStdSize, numDescriptors), type, true);
+		return createDescriptorHeap_Internal(std::max(m_committedHeapStdSize, numDescriptors), type, false, true);
 	}
 
-	DescriptorHeapHandle DescriptorHeapStore::createDescriptorHeap_Internal(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type, bool committed)
+	DescriptorHeapHandle DescriptorHeapStore::createDescriptorHeap_Internal(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible, bool committed)
 	{
 		DescriptorHeap& heap = m_descriptorHeaps.emplace_back();
 		heap.type = type;
@@ -126,8 +126,7 @@ namespace Okay
 		D3D12_DESCRIPTOR_HEAP_DESC dxHeapDesc = {};
 		dxHeapDesc.Type = type;
 		dxHeapDesc.NumDescriptors = numDescriptors;
-		dxHeapDesc.Flags = type == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV ? // Unsure if this should actually be handled like this :spinthink:
-			D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+		dxHeapDesc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 		dxHeapDesc.NodeMask = 0;
 
 		DX_CHECK(m_pDevice->CreateDescriptorHeap(&dxHeapDesc, IID_PPV_ARGS(&heap.pDXDescriptorHeap)));

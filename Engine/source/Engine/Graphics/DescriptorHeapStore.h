@@ -42,7 +42,7 @@ namespace Okay
 		void initialize(ID3D12Device* pDevice, uint32_t committedHeapStdSize);
 		void shutdown();
 
-		DescriptorHeapHandle createDescriptorHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type);
+		DescriptorHeapHandle createDescriptorHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible);
 		Descriptor allocateDescriptors(DescriptorHeapHandle heapHandle, uint32_t slotOffset, const DescriptorDesc* pDescs, uint32_t numDescriptors);
 
 		Descriptor allocateCommittedDescriptors(D3D12_DESCRIPTOR_HEAP_TYPE type, const DescriptorDesc* pDescs, uint32_t numDescriptors);
@@ -51,7 +51,7 @@ namespace Okay
 
 	private:
 		DescriptorHeapHandle findSufficentCommittedHeap(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type);
-		DescriptorHeapHandle createDescriptorHeap_Internal(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type, bool committed);
+		DescriptorHeapHandle createDescriptorHeap_Internal(uint32_t numDescriptors, D3D12_DESCRIPTOR_HEAP_TYPE type, bool shaderVisible, bool committed);
 
 		void validateDescriptorHeapHandle(DescriptorHeapHandle handle);
 

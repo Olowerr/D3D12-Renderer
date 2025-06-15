@@ -4,11 +4,9 @@
 
 namespace Okay
 {
-	void GPUResourceManager::initialize(ID3D12Device* pDevice, CommandContext& commandContext, RingBuffer& ringBuffer, DescriptorHeapStore& descriptorHeapStore)
+	void GPUResourceManager::initialize(ID3D12Device* pDevice, DescriptorHeapStore& descriptorHeapStore)
 	{
 		m_pDevice = pDevice;
-		m_pCommandContext = &commandContext;
-		m_pRingBuffer = &ringBuffer;
 		m_pDescriptorHeapStore = &descriptorHeapStore;
 
 		m_heapStore.initialize(m_pDevice, 100'000'000, 1'000'000);
@@ -27,16 +25,12 @@ namespace Okay
 		m_pDevice = nullptr;
 	}
 
-	Allocation GPUResourceManager::createTexture(uint32_t width, uint32_t height, uint16_t mipLevels, uint32_t arraySize, DXGI_FORMAT format, uint32_t flags, const void* pData)
+	Allocation GPUResourceManager::createTexture(const TextureDescription& textureDesc, const void* pData, CommandContext* pUploadContext)
 	{
-		OKAY_ASSERT(width);
-		OKAY_ASSERT(height);
-		OKAY_ASSERT(TextureFlags(flags) != OKAY_TEXTURE_FLAG_NONE);
-
-		bool isDepth = flags & OKAY_TEXTURE_FLAG_DEPTH;
+		bool isDepth = textureDesc.flags & OKAY_TEXTURE_FLAG_DEPTH;
 
 		D3D12_CLEAR_VALUE clearValue = {};
-		clearValue.Format = format;
+		clearValue.Format = textureDesc.format;
 		D3D12_CLEAR_VALUE* pClearValue = nullptr;
 
 		// how to improve :thonk:
@@ -47,7 +41,7 @@ namespace Okay
 			clearValue.DepthStencil.Stencil = 0;
 			clearValue.Format = DXGI_FORMAT_D32_FLOAT; // Assuming depth uses some single 32bit format
 		}
-		else if (flags & OKAY_TEXTURE_FLAG_RENDER)
+		else if (textureDesc.flags & OKAY_TEXTURE_FLAG_RENDER)
 		{
 			pClearValue = &clearValue;
 			clearValue.Color[0] = 0.f;
@@ -57,10 +51,10 @@ namespace Okay
 		}
 
 		// Ensure we don't try to create more mipmaps than possible given the width & height
-		mipLevels = glm::min(mipLevels, (uint16_t)(glm::log2(glm::max(width, height)) + 1));
+		uint32_t mipLevels = glm::min(textureDesc.mipLevels, (uint16_t)(glm::log2(glm::max(textureDesc.width, textureDesc.height)) + 1));
 
 		Resource& resource = m_resources.emplace_back();
-		resource.pDXResource = m_heapStore.requestResource(D3D12_HEAP_TYPE_DEFAULT, width, height, mipLevels, arraySize, DXGI_FORMAT(format), pClearValue, isDepth);
+		resource.pDXResource = m_heapStore.requestResource(D3D12_HEAP_TYPE_DEFAULT, textureDesc.width,textureDesc.height, mipLevels, textureDesc.arraySize, textureDesc.format, pClearValue, isDepth);
 
 		D3D12_RESOURCE_DESC desc = resource.pDXResource->GetDesc();
 		D3D12_RESOURCE_ALLOCATION_INFO resourceAllocationInfo = m_pDevice->GetResourceAllocationInfo(0, 1, &desc);
@@ -70,11 +64,11 @@ namespace Okay
 
 		if (pData)
 		{
-			updateTexture(resource.pDXResource, (uint8_t*)pData);
+			updateTexture(resource.pDXResource, (uint8_t*)pData, *pUploadContext);
 
-			if (flags & OKAY_TEXTURE_FLAG_SHADER_READ && mipLevels == 1)
+			if (textureDesc.flags & OKAY_TEXTURE_FLAG_SHADER_READ && mipLevels == 1)
 			{
-				m_pCommandContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				pUploadContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 			}
 		}
 
@@ -104,7 +98,7 @@ namespace Okay
 		return resource;
 	}
 
-	Allocation GPUResourceManager::allocateInto(Resource resource, uint64_t offset, uint64_t elementSize, uint32_t numElements, const void* pData)
+	Allocation GPUResourceManager::allocateInto(Resource resource, uint64_t offset, uint64_t elementSize, uint32_t numElements, const void* pData, RingBuffer* pUploadBuffer, CommandContext* pUploadContext)
 	{
 		validateResourceHandle(resource.handle);
 		Resource& resourceRef = m_resources[resource.handle];
@@ -130,20 +124,22 @@ namespace Okay
 
 		if (pData)
 		{
-			updateBuffer(allocation, pData);
+			updateBuffer(allocation, pData, pUploadBuffer, pUploadContext);
 		}
 
 		return allocation;
 	}
 
-	void GPUResourceManager::updateBuffer(const Allocation& allocation, const void* pData)
+	void GPUResourceManager::updateBuffer(const Allocation& allocation, const void* pData, RingBuffer* pUploadBuffer, CommandContext* pUploadContext)
 	{
 		validateResourceHandle(allocation.resourceHandle);
 		Resource& resource = m_resources[allocation.resourceHandle];
 
 		if (resource.heapType == D3D12_HEAP_TYPE_DEFAULT)
 		{
-			updateBufferUpload(resource.pDXResource, allocation.resourceOffset, allocation.elementSize * allocation.numElements, pData);
+			OKAY_ASSERT(pUploadBuffer);
+			OKAY_ASSERT(pUploadContext);
+			updateBufferUpload(*pUploadBuffer, *pUploadContext, resource.pDXResource, allocation.resourceOffset, allocation.elementSize * allocation.numElements, pData);
 		}
 		else
 		{
@@ -204,7 +200,7 @@ namespace Okay
 		return desc;
 	}
 
-	void GPUResourceManager::generateMipMaps()
+	void GPUResourceManager::generateMipMaps(ID3D12CommandQueue* pCommandQueue)
 	{
 		/*
 			In DirectX 12 we need to generate the content of the mipMaps manually.
@@ -256,10 +252,6 @@ namespace Okay
 			return;
 		}
 
-		
-		// Flush to ensure that texture content is uploaded to the GPU before executing a new commandList that needs to access the data.
-		m_pCommandContext->flush();
-
 
 		D3D12_RESOURCE_DESC intermediateTextureDesc = m_resources[0].pDXResource->GetDesc();
 		intermediateTextureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
@@ -286,9 +278,12 @@ namespace Okay
 
 
 		CommandContext computeContext;
-		computeContext.initialize(m_pDevice, D3D12_COMMAND_LIST_TYPE_COMPUTE);
+		computeContext.initialize(m_pDevice, pCommandQueue);
 		ID3D12GraphicsCommandList* pGraphicsComputeList = computeContext.getCommandList();
 
+		RingBuffer ringBuffer;
+		ringBuffer.initialize(m_pDevice, RESOURCE_PLACEMENT_ALIGNMENT * 2);
+		ringBuffer.map();
 
 		ID3D12RootSignature* pMipMapRootSignature = createMipMapRootSignature();
 		ID3D12PipelineState* pMipMapPSO = createMipMapPSO(pMipMapRootSignature);
@@ -297,7 +292,7 @@ namespace Okay
 		pGraphicsComputeList->SetPipelineState(pMipMapPSO);
 
 
-		DescriptorHeapHandle descHeapHandle = m_pDescriptorHeapStore->createDescriptorHeap(totalMipMaps, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+		DescriptorHeapHandle descHeapHandle = m_pDescriptorHeapStore->createDescriptorHeap(totalMipMaps, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, true);
 		ID3D12DescriptorHeap* pDescriptorHeap = m_pDescriptorHeapStore->getDXDescriptorHeap(descHeapHandle);
 
 		pGraphicsComputeList->SetDescriptorHeaps(1, &pDescriptorHeap);
@@ -345,7 +340,7 @@ namespace Okay
 
 
 				float uavIdxAndSrvMip = (float)i - 1;
-				D3D12_GPU_VIRTUAL_ADDRESS cbAddress = m_pRingBuffer->allocateMapped(&uavIdxAndSrvMip, sizeof(float));
+				D3D12_GPU_VIRTUAL_ADDRESS cbAddress = ringBuffer.allocateMapped(&uavIdxAndSrvMip, sizeof(float));
 				pGraphicsComputeList->SetComputeRootConstantBufferView(1, cbAddress);
 
 
@@ -361,26 +356,26 @@ namespace Okay
 
 			copyDifferentTextures(pGraphicsComputeList, resource.pDXResource, pDXIntermediateTexture, (uint32_t)textureDesc.Width, textureDesc.Height);
 
-			m_pCommandContext->transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-
+			computeContext.transitionResource(resource.pDXResource, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		}
 
 		computeContext.flush();
 		computeContext.shutdown();
+		ringBuffer.shutdown();
 		
 		D3D12_RELEASE(pDXIntermediateTexture);
 		D3D12_RELEASE(pMipMapRootSignature);
 		D3D12_RELEASE(pMipMapPSO);
 	}
 
-	void GPUResourceManager::updateBufferUpload(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData)
+	void GPUResourceManager::updateBufferUpload(RingBuffer& ringBuffer, CommandContext& uploadContext, ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData)
 	{
-		uint64_t ringBufferOffset = m_pRingBuffer->getOffset();
+		uint64_t ringBufferOffset = ringBuffer.getOffset();
 
-		m_pRingBuffer->allocateMapped(pData, byteSize);
+		ringBuffer.allocateMapped(pData, byteSize);
 
-		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
-		pCommandList->CopyBufferRegion(pDXResource, resourceOffset, m_pRingBuffer->getDXResource(), ringBufferOffset, byteSize);
+		ID3D12GraphicsCommandList* pCommandList = uploadContext.getCommandList();
+		pCommandList->CopyBufferRegion(pDXResource, resourceOffset, ringBuffer.getDXResource(), ringBufferOffset, byteSize);
 	}
 
 	void GPUResourceManager::updateBufferDirect(ID3D12Resource* pDXResource, uint64_t resourceOffset, uint64_t byteSize, const void* pData)
@@ -395,7 +390,7 @@ namespace Okay
 		pDXResource->Unmap(0, nullptr);
 	}
 
-	void GPUResourceManager::updateTexture(ID3D12Resource* pDXResource, uint8_t* pData)
+	void GPUResourceManager::updateTexture(ID3D12Resource* pDXResource, uint8_t* pData, CommandContext& uploadContext)
 	{
 		D3D12_RESOURCE_DESC textureDesc = pDXResource->GetDesc();
 		textureDesc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
@@ -431,10 +426,10 @@ namespace Okay
 		copySrc.PlacedFootprint = footPrint;
 		copySrc.PlacedFootprint.Offset = 0;
 
-		ID3D12GraphicsCommandList* pCommandList = m_pCommandContext->getCommandList();
+		ID3D12GraphicsCommandList* pCommandList = uploadContext.getCommandList();
 		pCommandList->CopyTextureRegion(&copyDst, 0, 0, 0, &copySrc, nullptr);
 
-		m_pCommandContext->flush();
+		uploadContext.flush();
 		textureUploadBuffer.shutdown();
 	}
 

@@ -39,7 +39,7 @@
     <ClInclude Include="source\Engine\Graphics\Renderer.h" />
     <ClInclude Include="source\Engine\Graphics\RenderPass.h" />
     <ClInclude Include="source\Engine\Graphics\RingBuffer.h" />
-    <ClInclude Include="source\Engine\Misc\StaticContainer.h" />
+    <ClInclude Include="source\Engine\Misc\ActiveVector.h" />
     <ClInclude Include="source\Engine\OkayD3D12.h" />
     <ClInclude Include="source\Engine\Resources\Mesh.h" />
     <ClInclude Include="source\Engine\Resources\ResourceManager.h" />

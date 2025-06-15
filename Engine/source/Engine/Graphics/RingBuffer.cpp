@@ -10,6 +10,9 @@ namespace Okay
 	
 	void RingBuffer::shutdown()
 	{
+		if (m_pMappedPtr)
+			unmap();
+
 		D3D12_RELEASE(m_pRingBuffer);
 	}
 

@@ -105,7 +105,7 @@
     <ClInclude Include="deps\include\imgui\imstb_truetype.h">
       <Filter>Imgui</Filter>
     </ClInclude>
-    <ClInclude Include="source\Engine\Misc\StaticContainer.h">
+    <ClInclude Include="source\Engine\Misc\ActiveVector.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="source\Engine\Graphics\Handlers\LightHandler.h">

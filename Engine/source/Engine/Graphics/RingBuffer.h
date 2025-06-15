@@ -35,7 +35,7 @@ namespace Okay
 		void createBuffer(uint64_t size);
 
 	private:
-		ID3D12Device* m_pDevice;
+		ID3D12Device* m_pDevice = nullptr;
 		ID3D12Resource* m_pRingBuffer = nullptr;
 		uint8_t* m_pMappedPtr = nullptr;
 
